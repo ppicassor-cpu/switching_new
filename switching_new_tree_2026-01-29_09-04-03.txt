@@ -1,0 +1,113 @@
+switching_new/
+├── android/
+│   ├── .kotlin/
+│   │   └── sessions/
+│   ├── app/
+│   │   ├── src/
+│   │   │   ├── debug/
+│   │   │   │   └── AndroidManifest.xml
+│   │   │   ├── debugOptimized/
+│   │   │   │   └── AndroidManifest.xml
+│   │   │   └── main/
+│   │   │       ├── java/
+│   │   │       │   └── com/
+│   │   │       │       └── switching/
+│   │   │       │           └── app/
+│   │   │       │               ├── MainActivity.kt
+│   │   │       │               └── MainApplication.kt
+│   │   │       ├── res/
+│   │   │       │   ├── drawable/
+│   │   │       │   │   ├── ic_launcher_background.xml
+│   │   │       │   │   └── rn_edit_text_material.xml
+│   │   │       │   ├── drawable-hdpi/
+│   │   │       │   │   └── splashscreen_logo.png
+│   │   │       │   ├── drawable-mdpi/
+│   │   │       │   │   └── splashscreen_logo.png
+│   │   │       │   ├── drawable-xhdpi/
+│   │   │       │   │   └── splashscreen_logo.png
+│   │   │       │   ├── drawable-xxhdpi/
+│   │   │       │   │   └── splashscreen_logo.png
+│   │   │       │   ├── drawable-xxxhdpi/
+│   │   │       │   │   └── splashscreen_logo.png
+│   │   │       │   ├── mipmap-anydpi-v26/
+│   │   │       │   │   ├── ic_launcher.xml
+│   │   │       │   │   └── ic_launcher_round.xml
+│   │   │       │   ├── mipmap-hdpi/
+│   │   │       │   │   ├── ic_launcher.webp
+│   │   │       │   │   ├── ic_launcher_foreground.webp
+│   │   │       │   │   └── ic_launcher_round.webp
+│   │   │       │   ├── mipmap-mdpi/
+│   │   │       │   │   ├── ic_launcher.webp
+│   │   │       │   │   ├── ic_launcher_foreground.webp
+│   │   │       │   │   └── ic_launcher_round.webp
+│   │   │       │   ├── mipmap-xhdpi/
+│   │   │       │   │   ├── ic_launcher.webp
+│   │   │       │   │   ├── ic_launcher_foreground.webp
+│   │   │       │   │   └── ic_launcher_round.webp
+│   │   │       │   ├── mipmap-xxhdpi/
+│   │   │       │   │   ├── ic_launcher.webp
+│   │   │       │   │   ├── ic_launcher_foreground.webp
+│   │   │       │   │   └── ic_launcher_round.webp
+│   │   │       │   ├── mipmap-xxxhdpi/
+│   │   │       │   │   ├── ic_launcher.webp
+│   │   │       │   │   ├── ic_launcher_foreground.webp
+│   │   │       │   │   └── ic_launcher_round.webp
+│   │   │       │   ├── values/
+│   │   │       │   │   ├── colors.xml
+│   │   │       │   │   ├── strings.xml
+│   │   │       │   │   └── styles.xml
+│   │   │       │   └── values-night/
+│   │   │       │       └── colors.xml
+│   │   │       └── AndroidManifest.xml
+│   │   ├── build.gradle
+│   │   ├── debug.keystore
+│   │   ├── my-release-key.keystore
+│   │   └── proguard-rules.pro
+│   ├── gradle/
+│   │   └── wrapper/
+│   │       ├── gradle-wrapper.jar
+│   │       └── gradle-wrapper.properties
+│   ├── .gitignore
+│   ├── build.gradle
+│   ├── gradle.properties
+│   ├── gradlew
+│   ├── gradlew.bat
+│   └── settings.gradle
+├── app/
+│   └── index.tsx
+├── components/
+│   ├── ui/
+│   │   ├── collapsible.tsx
+│   │   ├── icon-symbol.ios.tsx
+│   │   └── icon-symbol.tsx
+│   ├── external-link.tsx
+│   ├── haptic-tab.tsx
+│   ├── hello-wave.tsx
+│   ├── parallax-scroll-view.tsx
+│   ├── themed-text.tsx
+│   └── themed-view.tsx
+├── constants/
+│   └── theme.ts
+├── hooks/
+│   ├── use-color-scheme.ts
+│   ├── use-color-scheme.web.ts
+│   └── use-theme-color.ts
+├── plugins/
+│   └── withAndroidQueries.js
+├── scripts/
+│   └── reset-project.js
+├── .gitignore
+├── all_project_code_20260129_090358.txt
+├── app.json
+├── App.tsx
+├── debug.keystore
+├── eslint.config.js
+├── export_code.py
+├── make_full_tree.py
+├── my-release-key.keystore
+├── package-lock.json
+├── package.json
+├── README.md
+├── splash-icon.png
+├── toggle-logo-enable.patch
+└── tsconfig.json

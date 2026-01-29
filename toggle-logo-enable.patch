@@ -1,0 +1,215 @@
+﻿diff --git a/App.tsx b/App.tsx
+--- a/App.tsx
++++ b/App.tsx
+@@
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+ import * as NavigationBar from 'expo-navigation-bar';
+ import React, { useEffect, useRef, useState } from 'react';
+ import {
+   Alert,
+   FlatList,
+   NativeEventEmitter,
+   NativeModules,
+   Platform,
+   SafeAreaView,
+   StatusBar,
+   StyleSheet,
+-  Switch,
+   Text,
+   TouchableOpacity,
+   View,
+   Image,
+   Modal
+ } from 'react-native';
+@@
+   return (
+     <SafeAreaView style={styles.container}>
+       <StatusBar barStyle="light-content" backgroundColor="#000000" />
+-      
+-      {/* 상단 로고 영역 */}
+-      <View style={styles.topSection}>
+-         <View style={styles.logoWrapper}>
+-            {/* 안전하게 로딩되도록 변경된 파일명 사용 */}
+-            <Image 
+-                source={require('./assets/app-logo.png')} 
+-                style={styles.logoImage} 
+-                resizeMode="contain"
+-            />
+-         </View>
+-
+-         <View style={styles.switchContainer}>
+-            <Text style={styles.switchLabel}>기능 활성화</Text>
+-            <Switch
+-                value={isEnabled}
+-                onValueChange={setIsEnabled}
+-                trackColor={{ false: '#333', true: '#007AFF' }}
+-                thumbColor={'#fff'}
+-            />
+-         </View>
+-
+-         <View style={styles.premiumBadge}>
+-            <Text style={styles.premiumBtnText}>{isPremium ? "💎 프리미엄 사용 중" : "🆓 무료 버전"}</Text>
+-         </View>
+-      </View>
+-
+-      {/* 중앙 앱 선택 영역 */}
+-      <View style={styles.centerSection}>
+-         <Text style={styles.sectionTitle}>현재 지정된 앱</Text>
+-         <View style={styles.selectedDisplay}>
+-            <Text style={styles.selectedAppName}>
+-                {targetLabel || "(선택된 앱 없음)"}
+-            </Text>
+-         </View>
+-
+-         <TouchableOpacity 
+-            style={styles.selectButton} 
+-            onPress={() => setModalVisible(true)}
+-         >
+-            <Text style={styles.selectButtonText}>앱 변경하기 </Text>
+-         </TouchableOpacity>
+-      </View>
+-
+-      {/* 하단 저장 버튼 */}
+-      <View style={styles.bottomSection}>
+-         <TouchableOpacity style={styles.saveButton} onPress={handleSaveWithLogic}>
+-            <Text style={styles.saveButtonText}>설정 저장 완료</Text>
+-         </TouchableOpacity>
+-      </View>
++
++      <View style={styles.mainContent}>
++        {/* 상단 로고(기능 활성화 버튼) 영역 */}
++        <View style={styles.topSection}>
++          <TouchableOpacity
++            activeOpacity={0.85}
++            style={styles.logoWrapper}
++            onPress={() => setIsEnabled((prev) => !prev)}
++          >
++            <Image
++              source={
++                isEnabled
++                  ? require('./assets/app-logo2.png')
++                  : require('./assets/app-logo.png')
++              }
++              style={styles.logoImage}
++              resizeMode="contain"
++            />
++          </TouchableOpacity>
++
++          <View style={styles.premiumBadge}>
++            <Text style={styles.premiumBtnText}>{isPremium ? "💎 프리미엄 사용 중" : "🆓 무료 버전"}</Text>
++          </View>
++        </View>
++
++        {/* 중앙 앱 선택 영역 */}
++        <View style={styles.centerSection}>
++          <Text style={styles.sectionTitle}>현재 지정된 앱</Text>
++          <View style={styles.selectedDisplay}>
++            <Text style={styles.selectedAppName}>
++              {targetLabel || "(선택된 앱 없음)"}
++            </Text>
++          </View>
++
++          <TouchableOpacity
++            style={styles.selectButton}
++            onPress={() => setModalVisible(true)}
++          >
++            <Text style={styles.selectButtonText}>앱 변경하기 </Text>
++          </TouchableOpacity>
++        </View>
++
++        {/* 하단 저장 버튼 */}
++        <View style={styles.bottomSection}>
++          <TouchableOpacity style={styles.saveButton} onPress={handleSaveWithLogic}>
++            <Text style={styles.saveButtonText}>설정 저장 완료</Text>
++          </TouchableOpacity>
++        </View>
++      </View>
+@@
+ const styles = StyleSheet.create({
+   container: { flex: 1, backgroundColor: '#000000' },
+-  topSection: { alignItems: 'center', paddingTop: 40, paddingBottom: 20 },
+-  logoWrapper: { marginBottom: 15 },
++  mainContent: { flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
++  topSection: { alignItems: 'center', marginBottom: 25 },
++  logoWrapper: { marginBottom: 12 },
+   logoImage: { width: 150, height: 150 },
+-  switchContainer: { 
+-    flexDirection: 'row', 
+-    alignItems: 'center', 
+-    backgroundColor: '#1a1a1a', 
+-    paddingVertical: 10, 
+-    paddingHorizontal: 25, 
+-    borderRadius: 30,
+-    marginBottom: 15
+-  },
+-  switchLabel: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginRight: 15 },
+   premiumBadge: { marginTop: 5 },
+   premiumBtnText: { color: '#ffd700', fontSize: 12, fontWeight: '600' },
+-  centerSection: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
++  centerSection: { alignItems: 'center', width: '100%', marginBottom: 25 },
+   sectionTitle: { color: '#888', fontSize: 14, marginBottom: 10 },
+   selectedDisplay: { 
+     marginBottom: 30, 
+     alignItems: 'center',
+     borderBottomWidth: 1,
+     borderBottomColor: '#333',
+     paddingBottom: 10,
+     width: '100%'
+   },
+   selectedAppName: { color: '#007AFF', fontSize: 28, fontWeight: '900', textAlign: 'center' },
+   selectButton: { 
+     backgroundColor: '#333', 
+     paddingVertical: 15, 
+     paddingHorizontal: 40, 
+     borderRadius: 12,
+     borderWidth: 1,
+     borderColor: '#444'
+   },
+   selectButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+-  bottomSection: { paddingHorizontal: 30, paddingBottom: 20 },
++  bottomSection: { width: '100%', paddingBottom: 10 },
+   saveButton: { backgroundColor: '#ffffff', padding: 20, borderRadius: 16, alignItems: 'center' },
+   saveButtonText: { color: '#000000', fontSize: 18, fontWeight: '900' },
+   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+   modalContent: { 
+     backgroundColor: '#111', 
+     borderTopLeftRadius: 25, 
+     borderTopRightRadius: 25, 
+     height: '80%', 
+     paddingTop: 20
+   },
+   modalHeader: { 
+     flexDirection: 'row', 
+     justifyContent: 'space-between', 
+     alignItems: 'center', 
+     paddingHorizontal: 20,
+     marginBottom: 15,
+     borderBottomWidth: 1,
+     borderBottomColor: '#222',
+     paddingBottom: 15
+   },
+   modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+   closeBtn: { padding: 5 },
+   closeText: { color: '#888', fontSize: 16 },
+   listContent: { paddingHorizontal: 20, paddingBottom: 50 },
+   appItem: { 
+     flexDirection: 'row', 
+     justifyContent: 'space-between', 
+     alignItems: 'center', 
+     padding: 18, 
+     marginVertical: 5, 
+     borderRadius: 15, 
+     backgroundColor: '#1a1a1a',
+   },
+   selectedItem: { backgroundColor: '#222', borderColor: '#007AFF', borderWidth: 1 },
+   appLabel: { fontSize: 17, fontWeight: 'bold', color: '#ffffff' },
+   appPackage: { fontSize: 12, color: '#555', marginTop: 4 },
+   checkIcon: { color: '#007AFF', fontWeight: 'bold', fontSize: 20 },
+   emptyText: { color: '#444', textAlign: 'center', marginTop: 50, fontSize: 14 },
+   adBannerContainer: { 
+     alignItems: 'center', 
+     justifyContent: 'center', 
+     minHeight: 60, 
+     marginBottom: Platform.OS === 'android' ? 10 : 0
+   }
+ });

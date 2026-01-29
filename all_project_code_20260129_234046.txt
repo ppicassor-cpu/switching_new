@@ -1,0 +1,1998 @@
+==================================================
+   N_BBANG PROJECT SOURCE CODE
+   Exported at: 2026-01-29 23:40:46
+==================================================
+
+
+================================================================================
+ FILE: app.json
+================================================================================
+
+{
+  "expo": {
+    "name": "스위칭",
+    "slug": "switching",
+    "scheme": "switching",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.switching.app",
+      "versionCode": 13,
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-5144004139813427~5730965404"
+      },
+      "navigationBar": {
+        "backgroundColor": "#000000",
+        "barStyle": "light-content"
+      }
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-5144004139813427~5730965404",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "delayAppMeasurementInit": true
+        }
+      ],
+      "expo-build-properties",
+      "react-native-iap",
+      "./plugins/withAndroidQueries",
+      "./plugins/withAppSwitch",
+      "./withAndroidSigning.js",
+      "./withAutoVersion.js"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9446e8e2-b853-40b2-8597-ec2e2385ce09"
+      }
+    },
+    "owner": "son_sunghyun",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9446e8e2-b853-40b2-8597-ec2e2385ce09",
+      "enabled": true,
+      "checkOnLaunch": "ALWAYS",
+      "fallbackToCacheTimeout": 0
+    }
+  }
+}
+
+================================================================================
+ FILE: App.tsx
+================================================================================
+
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as NavigationBar from 'expo-navigation-bar';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+  // SafeAreaView, // ✅ [수정] 제거 (deprecated 경고 제거)
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+// ✅ [추가] deprecated 경고 제거용 SafeAreaView
+import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ [추가]
+// ✅ [수정] R(리로드) 시 TurboModule 준비 타이밍 문제로 크래쉬 방지: GMA는 런타임에 지연 로드
+import * as IAP from 'react-native-iap';
+
+// 네이티브 모듈 연결
+const { AppSwitchModule } = NativeModules;
+const eventEmitter = AppSwitchModule ? new NativeEventEmitter(AppSwitchModule) : null;
+
+const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
+const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
+
+// ✅ [수정] 전면광고도 PG 이하 + 비개인화 + 아동/동의 관련 플래그 명시
+const INTERSTITIAL_REQUEST_OPTIONS = {
+  requestNonPersonalizedAdsOnly: true,
+  maxAdContentRating: 'PG',
+  tagForChildDirectedTreatment: false,
+  tagForUnderAgeOfConsent: false,
+};
+
+interface AppInfo {
+  label: string;
+  packageName: string;
+}
+
+interface AppState {
+  targetPackage: string;
+  isEnabled: boolean;
+  isPremium: boolean;
+}
+
+const { width } = Dimensions.get('window');
+
+export default function App() {
+  const [gma, setGma] = useState<any>(null); 
+  const [isEnabled, setIsEnabled] = useState<boolean>(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current; // ✅ 깜빡임 값 초기화
+
+  // ✅ 시스템 OFFLINE일 때만 깜빡이는 루프 실행
+  useEffect(() => {
+    if (!isEnabled) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(fadeAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [isEnabled]);
+  const interstitialRef = useRef<any>(null); // ✅ [추가] interstitial 인스턴스 보관
+
+  const [appList, setAppList] = useState<AppInfo[]>([]);
+  const [targetPackage, setTargetPackage] = useState<string>('');
+  const [targetLabel, setTargetLabel] = useState<string>('');
+  const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [adLoaded, setAdLoaded] = useState<boolean>(false);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const stateRef = useRef<AppState>({ targetPackage, isEnabled, isPremium });
+
+  useEffect(() => {
+    stateRef.current = { targetPackage, isEnabled, isPremium };
+  }, [targetPackage, isEnabled, isPremium]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+  // 상단 상태바 투명하게 만들어서 배경색(검정)과 이어지게 함
+  StatusBar.setTranslucent(true);
+  StatusBar.setBackgroundColor("transparent");
+  // NavigationBar.setBackgroundColorAsync("#000000"); // ✅ [수정] edge-to-edge 경고 제거(호출 안 함)
+  NavigationBar.setButtonStyleAsync("light");
+}
+
+    const checkSubscription = async () => {
+      try {
+        await IAP.initConnection();
+        const purchases = await IAP.getAvailablePurchases();
+        const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
+        setIsPremium(hasSub);
+      } catch (err) {
+        console.warn("구독 확인 실패:", err);
+      }
+    };
+    checkSubscription();
+
+    // ✅ [수정] GMA는 지연 로드 후 interstitial 생성/리스너 등록
+    let mounted = true; // ✅ [추가]
+    let unsubscribeLoaded: any = null; // ✅ [추가]
+    let unsubscribeClosed: any = null; // ✅ [추가]
+
+    const t = setTimeout(async () => { 
+      try {
+        const mod = require('react-native-google-mobile-ads'); 
+        await mod.default().initialize();
+        if (!mounted) return;
+
+        setGma(mod); 
+
+        const ad = mod.InterstitialAd.createForAdRequest(
+          INTERSTITIAL_ID,
+          INTERSTITIAL_REQUEST_OPTIONS
+        ); // ✅ [추가]
+        interstitialRef.current = ad; // ✅ [추가]
+
+        unsubscribeLoaded = ad.addAdEventListener(mod.AdEventType.LOADED, () => {
+          setAdLoaded(true);
+        }); // ✅ [추가]
+
+        unsubscribeClosed = ad.addAdEventListener(mod.AdEventType.CLOSED, () => {
+          setAdLoaded(false);
+          ad.load();
+          launchTargetApp();
+        }); // ✅ [추가]
+
+        ad.load(); // ✅ [추가]
+      } catch (e) {
+        console.warn("GMA init skipped (runtime not ready):", e); // ✅ [추가]
+      }
+    }, 0);
+
+    const volumeListener = eventEmitter?.addListener('onVolumeDownTrigger', handleVolumeDownTrigger);
+
+    return () => {
+      mounted = false; // ✅ [추가]
+      clearTimeout(t); // ✅ [추가]
+      try { unsubscribeLoaded && unsubscribeLoaded(); } catch {} // ✅ [추가]
+      try { unsubscribeClosed && unsubscribeClosed(); } catch {} // ✅ [추가]
+      interstitialRef.current = null; // ✅ [추가]
+      volumeListener?.remove();
+      IAP.endConnection();
+    };
+  }, []);
+
+  useEffect(() => {
+    // 앱 구동 시 네이티브 저장소(SharedPreferences)에서 저장된 설정값 호출
+    if (AppSwitchModule?.getSettings) {
+      AppSwitchModule.getSettings().then((res: any) => {
+        if (res) {
+          // 저장된 패키지 명과 활성화 상태를 UI 상태에 반영
+          setTargetPackage(res.targetPackage || '');
+          setIsEnabled(res.isEnabled || false);
+        }
+      });
+    }
+
+    if (AppSwitchModule?.getInstalledApps) {
+      AppSwitchModule.getInstalledApps()
+        .then((apps: AppInfo[]) => {
+          const sortedApps = apps.sort((a, b) => a.label.localeCompare(b.label));
+          setAppList(sortedApps);
+          setLoading(false);
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleVolumeDownTrigger = async () => {
+    const { targetPackage: pkg, isEnabled: enabled, isPremium: premium } = stateRef.current;
+
+    if (!enabled || !pkg) return;
+
+    if (premium) {
+      launchTargetApp();
+      return;
+    }
+
+    const lastAdTime = await AsyncStorage.getItem('last_ad_time');
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+
+    if (lastAdTime && now - parseInt(lastAdTime) < oneHour) {
+      launchTargetApp();
+    } else {
+      if (adLoaded && interstitialRef.current?.show) { // ✅ [수정]
+        await AsyncStorage.setItem('last_ad_time', now.toString());
+        interstitialRef.current.show(); // ✅ [수정]
+      } else {
+        launchTargetApp();
+      }
+    }
+  };
+
+  const launchTargetApp = () => {
+    const { targetPackage: pkg } = stateRef.current;
+    if (pkg && AppSwitchModule?.launchApp) {
+      AppSwitchModule.launchApp(pkg);
+    }
+  };
+
+  const handleSaveWithLogic = async () => {
+    if (!targetPackage) {
+      Alert.alert("알림", "앱을 선택해주세요.");
+      return;
+    }
+
+    if (isPremium) {
+      saveSettings();
+      return;
+    }
+
+    Alert.alert(
+      "설정 완료",
+      "기능(볼륨 다운) 사용 시 전면 광고가 실행되며, 이후 1시간 동안은 광고 없이 작동합니다.\n적용하시겠습니까?",
+      [
+        { text: "취소", style: "cancel" },
+        { text: "확인", onPress: () => saveSettings() }
+      ]
+    );
+  };
+
+  const saveSettings = () => {
+    if (AppSwitchModule?.saveSettings) {
+      // 네이티브 모듈의 인자 개수(2개)에 맞춰 호출 (패키지명, 활성화 여부)
+      AppSwitchModule.saveSettings(targetPackage, isEnabled);
+      Alert.alert("저장 성공", `[${targetLabel}] 설정이 시스템에 반영되었습니다.`);
+    }
+  };
+
+  const toggleEnabledByLogo = async () => {
+    // 1. 시스템을 켜려고 할 때만 권한 체크 수행
+    if (!isEnabled) {
+      if (AppSwitchModule?.isAccessibilityServiceEnabled) {
+        const isGranted = await AppSwitchModule.isAccessibilityServiceEnabled();
+        if (!isGranted) {
+          Alert.alert(
+            "접근성 권한 필요",
+            "볼륨 키를 감지하려면 접근성 권한이 필요합니다.\n\n[설정 이동] 후 '설치된 앱' 목록에서 [스위칭 서비스]를 '사용'으로 바꿔주세요.",
+            [
+              { text: "나중에", style: "cancel" },
+              { text: "설정 이동", onPress: () => AppSwitchModule.openAccessibilitySettings() }
+            ]
+          );
+          return; // 권한 없으면 'Online'으로 넘어가지 않음
+        }
+      }
+    }
+
+    // 2. 권한이 있거나 시스템을 끌 때는 기존 로직 수행
+    setIsEnabled((prev) => {
+      const nextState = !prev;
+      if (AppSwitchModule?.saveSettings) {
+        // [참고] 네이티브 설계에 맞춰 인자를 전달하세요 (이전 가이드에선 2개로 조정됨)
+        AppSwitchModule.saveSettings(targetPackage, nextState);
+      }
+      return nextState;
+    });
+  };
+
+  const renderItem = ({ item }: { item: AppInfo }) => (
+    <TouchableOpacity
+      style={[styles.appItem, targetPackage === item.packageName && styles.selectedItem]}
+      onPress={() => {
+        setTargetPackage(item.packageName);
+        setTargetLabel(item.label);
+        setModalVisible(false);
+      }}
+    >
+      <View>
+        <Text style={styles.appLabel}>{item.label}</Text>
+        <Text style={styles.appPackage}>{item.packageName}</Text>
+      </View>
+      {targetPackage === item.packageName && <Text style={styles.checkIcon}>✓</Text>}
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* 상태바는 투명하게 처리 */}
+      <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
+
+      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+        {/* 1. 상단: 프리미엄 뱃지 (시스템 영역 침범 방지용 마진 추가) */}
+        <View style={styles.headerArea}>
+          <View style={[styles.premiumBadge, isPremium ? styles.badgePremium : styles.badgeFree]}>
+            <Text style={styles.premiumText}>
+               {isPremium ? "💎 PREMIUM" : "FREE VERSION"}
+            </Text>
+          </View>
+        </View>
+
+        {/* 2. 메인 컨텐츠 (가운데 정렬) */}
+        <View style={styles.mainContent}>
+
+          {/* ✅ 시스템이 꺼져 있을 때만 깜빡이는 힌트 표시 */}
+          {!isEnabled && (
+            <Animated.View style={[styles.hintContainer, { opacity: fadeAnim }]}>
+              <Text style={styles.handEmoji}>👇 </Text>
+              <Text style={styles.hintText}>TAP to{"\n"}START</Text>
+            </Animated.View>
+          )}
+          
+          {/* 메인 로고 (Glow 효과 적용) */}
+          <TouchableOpacity 
+              onPress={toggleEnabledByLogo} 
+              activeOpacity={0.9} 
+              style={[styles.logoContainer, isEnabled && styles.logoGlow]}
+          >
+            <Image
+              source={
+                isEnabled
+                  ? require('./assets/app-logo2.png')
+                  : require('./assets/app-logo.png')
+              }
+              style={[styles.logoImage, { opacity: isEnabled ? 1 : 0.4 }]} // 꺼지면 더 흐리게
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+          
+          {/* 상태 메시지 */}
+          <Text style={[styles.statusLabel, { color: isEnabled ? '#1dd4f5' : '#555' }]}>
+              {isEnabled ? "System Online" : "System Offline"}
+          </Text>
+
+          {/* 앱 선택 카드 UI */}
+          <View style={styles.cardContainer}>
+              <Text style={styles.cardLabel}>TARGET APP</Text>
+              <TouchableOpacity 
+                  style={styles.appCard} 
+                  onPress={() => setModalVisible(true)}
+                  activeOpacity={0.7}
+              >
+                  <View style={[styles.cardIcon, { backgroundColor: targetLabel ? '#007AFF' : '#222' }]}>
+                      <Text style={styles.cardIconText}>{targetLabel ? targetLabel.charAt(0) : '?'}</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                      <Text style={styles.cardTitle} numberOfLines={1}>
+                          {targetLabel || "앱 선택하기"}
+                      </Text>
+                      <Text style={styles.cardSubTitle} numberOfLines={1}>
+                          {targetPackage || "Touch to select target"}
+                      </Text>
+                  </View>
+                  <View style={styles.cardArrow}>
+                      <Text style={styles.arrowText}>›</Text>
+                  </View>
+              </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 3. 하단: 플로팅 저장 버튼 (세련되고 작게 변경) */}
+        <View style={styles.footerArea}>
+          <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
+              <Text style={styles.fabIcon}>💾</Text>
+              <Text style={styles.fabText}>Save</Text>
+          </TouchableOpacity>
+        </View>
+
+
+        {/* 4. 광고 영역 (시스템 네비게이션 바와 겹치지 않게 패딩 추가) */}
+        <View style={styles.adContainer}>
+          {gma?.BannerAd && gma?.BannerAdSize ? ( // ✅ [수정] 런타임 준비 전엔 렌더하지 않음
+            <gma.BannerAd
+              unitId={BANNER_ID}
+              size={gma.BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              requestOptions={{ // ✅ [수정]
+                requestNonPersonalizedAdsOnly: true,
+                maxAdContentRating: 'PG',
+                tagForChildDirectedTreatment: false,
+                tagForUnderAgeOfConsent: false,
+              }}
+            />
+          ) : null}
+        </View>
+
+        {/* 5. 모달 */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select App</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
+                  <Text style={styles.closeText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              {loading ? (
+                <Text style={styles.emptyText}>Loading apps...</Text>
+              ) : (
+                <FlatList
+                  data={appList}
+                  renderItem={renderItem}
+                  keyExtractor={(item) => item.packageName}
+                  contentContainerStyle={styles.listContent}
+                  ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
+                  indicatorStyle="white"
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
+
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#050505' },
+  safeArea: { flex: 1 },
+
+  // 상단 영역 (시스템 상태바 고려하여 마진 추가)
+  headerArea: {
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: 20,
+    marginTop: Platform.OS === 'android'
+      ? (StatusBar.currentHeight || 20) + 5
+      : 10 + 12,                                  // ✅ [수정] iOS도 동일하게 아래로
+    zIndex: 10
+  },
+  premiumBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  badgeFree: { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: '#333' },
+  badgePremium: { backgroundColor: 'rgba(0,122,255,0.15)', borderColor: '#0052D4' },
+  premiumText: { fontSize: 9, fontWeight: '800', color: '#ccc', letterSpacing: 0.5 },
+
+  // 메인 영역
+  mainContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 80 // 하단 버튼 공간 확보
+  },
+  logoContainer: {
+    marginBottom: 25,
+    borderRadius: 100,
+  },
+  logoImage: { width: 160, height: 160 },
+  logoGlow: {
+    shadowColor: '#dae1e7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 40,
+    elevation: 25,
+  },
+  statusLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    marginBottom: 40,
+    textTransform: 'uppercase'
+  },
+
+  // 카드 UI 영역
+  cardContainer: { width: '85%', maxWidth: 340 },
+  cardLabel: {
+    color: '#666',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 8,
+    marginLeft: 4,
+    letterSpacing: 0.5
+  },
+  appCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#121212',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#2a2a2a'
+  },
+  cardIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14
+  },
+  cardIconText: { fontSize: 18, color: '#fff', fontWeight: 'bold' },
+  cardInfo: { flex: 1 },
+  cardTitle: { color: '#eee', fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  cardSubTitle: { color: '#555', fontSize: 11 },
+  cardArrow: { paddingLeft: 10 },
+  arrowText: { color: '#444', fontSize: 20 },
+
+  // 하단 영역 (광고와 거리를 더 두어 여유롭게 배치)
+  footerArea: {
+    position: 'absolute',
+    bottom: Platform.OS === 'android' ? 200 :190, 
+    width: '100%',
+    alignItems: 'center',
+    zIndex: 20
+  },
+  fabButton: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)', // 아주 미세한 투명감
+    paddingVertical: 10,
+    paddingHorizontal: 40,       // 가로로 길게 빼서 안정감 부여
+    borderRadius: 4,              // 각을 거의 살린 초미니멀 라운드
+    alignItems: 'center',
+    borderWidth: 0.9,           // 아주 가느다란 선
+    borderColor: '#49a0c2',          // 눈에 띄지 않는 차분한 그레이
+  },
+  fabIcon: { display: 'none' },   // 촌스러운 아이콘은 완전히 제거
+  fabText: { 
+    color: '#c8d0d4',             // 깔끔한 화이트
+    fontSize: 12, 
+    fontWeight: '400',            // 얇은 서체로 세련미 강조
+    letterSpacing: 2,            // 자간을 넓게 벌려 여백의 미 강조
+    textTransform: 'uppercase'
+  },
+
+  // 광고 영역 (미리 높이를 고정하여 레이아웃 흔들림 방지)
+  adContainer: {
+    width: '100%',
+    height: 60, // ✅ 광고 높이(보통 50~60)만큼 미리 자리를 고정합니다.
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000'
+  },
+
+  // 모달 스타일
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: {
+    width: '85%',
+    height: '65%',
+    backgroundColor: '#111',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#222',
+    overflow: 'hidden'
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+    backgroundColor: '#161616'
+  },
+  modalTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  closeBtn: { padding: 5 },
+  closeText: { color: '#666', fontSize: 18 },
+  listContent: { padding: 10 },
+  appItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    marginBottom: 6,
+    borderRadius: 12,
+    backgroundColor: '#1A1A1A'
+  },
+  selectedItem: { backgroundColor: '#111', borderColor: '#007AFF', borderWidth: 1 },
+  appLabel: { fontSize: 15, fontWeight: '500', color: '#eee' },
+  appPackage: { fontSize: 11, color: '#555', marginTop: 2 },
+  checkIcon: { color: '#007AFF', fontWeight: 'bold', fontSize: 16, position: 'absolute', right: 15 },
+  emptyText: { color: '#444', textAlign: 'center', marginTop: 50, fontSize: 12 },
+  // ✅ 테두리 박스를 제거하고 손모양과 글자만 남김
+  hintContainer: {
+    position: 'absolute',
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    top: 80,             // ✅ 50에서 110으로 늘려 더 아래로 이동
+    right: '12%',         // ✅ 10%에서 25%로 늘려 더 왼쪽으로 이동
+    zIndex: 30,
+  },
+  hintText: {
+    color: '#cccccc',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textAlign: 'left',    // ✅ 왼쪽 정렬로 변경
+    lineHeight: 12,       // ✅ 두 줄 간격 좁게 유지
+    marginLeft: -4,
+  },
+  handEmoji: {
+    fontSize: 20,
+    transform: [{ rotate: '45deg' }],
+    },
+});
+
+================================================================================
+ FILE: eslint.config.js
+================================================================================
+
+// https://docs.expo.dev/guides/using-eslint/
+const { defineConfig } = require('eslint/config');
+const expoConfig = require('eslint-config-expo/flat');
+
+module.exports = defineConfig([
+  expoConfig,
+  {
+    ignores: ['dist/*'],
+  },
+]);
+
+
+================================================================================
+ FILE: package.json
+================================================================================
+
+{
+  "name": "switching_new",
+  "main": "node_modules/expo/AppEntry.js",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "expo start",
+    "reset-project": "node ./scripts/reset-project.js",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "lint": "expo lint",
+    "build:final": "npx expo prebuild --clean && cd android && gradlew.bat app:bundleRelease && cd .. && node rename-bundle.js"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.4.0",
+    "@react-navigation/elements": "^2.6.3",
+    "@react-navigation/native": "^7.1.8",
+    "expo": "~54.0.32",
+    "expo-build-properties": "~1.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-font": "~14.0.11",
+    "expo-haptics": "~15.0.8",
+    "expo-image": "~3.0.11",
+    "expo-linking": "~8.0.11",
+    "expo-navigation-bar": "~5.0.10",
+    "expo-splash-screen": "~31.0.13",
+    "expo-status-bar": "~3.0.9",
+    "expo-symbols": "~1.0.8",
+    "expo-system-ui": "~6.0.9",
+    "expo-updates": "~29.0.16",
+    "expo-web-browser": "~15.0.10",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-google-mobile-ads": "^16.0.2",
+    "react-native-iap": "^14.7.7",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.5.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "eslint": "^9.25.0",
+    "eslint-config-expo": "~10.0.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
+
+================================================================================
+ FILE: rename-bundle.js
+================================================================================
+
+const fs = require('fs');
+const path = require('path');
+
+// 1. 설정 및 경로 정의
+const appJsonPath = path.resolve('app.json');
+const bundleDir = path.join('android', 'app', 'build', 'outputs', 'bundle', 'release');
+const sourceFile = path.join(bundleDir, 'app-release.aab');
+
+// 2. 버전 및 날짜 정보 가져오기
+const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf-8'));
+const versionCode = appJson.expo.android?.versionCode || 'unknown';
+const appName = appJson.expo.slug || 'myapp';
+
+const now = new Date();
+const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+
+// 3. 새 파일명 생성 (예: Whatflix-v12-20260129.aab)
+const newFileName = `${appName}-v${versionCode}-${dateStr}.aab`;
+const targetFile = path.join(bundleDir, newFileName);
+
+// 4. 파일 이름 변경 실행
+if (fs.existsSync(sourceFile)) {
+  fs.copyFileSync(sourceFile, path.join(path.resolve(), newFileName)); // 루트 폴더로 복사
+  console.log('--------------------------------------------------');
+  console.log(`✅ 관리용 파일 생성 완료!`);
+  console.log(`📂 파일명: ${newFileName}`);
+  console.log(`📍 위치: 프로젝트 루트 폴더`);
+  console.log('--------------------------------------------------');
+} else {
+  console.error('❌ 빌드된 .aab 파일을 찾을 수 없습니다. 빌드가 성공했는지 확인하세요.');
+}
+
+================================================================================
+ FILE: tsconfig.json
+================================================================================
+
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ]
+}
+
+
+================================================================================
+ FILE: withAndroidSigning.js
+================================================================================
+
+// FILE: plugins/withAndroidSigning.js
+const { withAppBuildGradle } = require("@expo/config-plugins");
+
+/**
+ * Gradle(groovy) 텍스트에서 특정 블록(예: signingConfigs { ... })을
+ * 중괄호 깊이로 안전하게 찾아 제거합니다. (정규식으로 상위 }까지 먹는 사고 방지)
+ */
+function removeBlockAll(src, blockName) {
+  let out = src;
+  while (true) {
+    const re = new RegExp(`(^|\\s)${blockName}\\s*\\{`, "m");
+    const m = re.exec(out);
+    if (!m) break;
+
+    const start = m.index + m[1].length;
+    const braceStart = out.indexOf("{", start);
+    if (braceStart < 0) break;
+
+    let depth = 0;
+    let end = -1;
+
+    for (let i = braceStart; i < out.length; i++) {
+      const ch = out[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+
+    if (end < 0) break;
+
+    // 블록 앞뒤 공백/개행 조금 정리
+    const before = out.slice(0, start);
+    const after = out.slice(end + 1);
+    out = before.replace(/[ \t]*$/m, "") + "\n" + after.replace(/^\s*\n/, "");
+  }
+  return out;
+}
+
+function findBlock(src, blockName) {
+  const re = new RegExp(`(^[\\t ]*)${blockName}\\s*\\{`, "m");
+  const m = re.exec(src);
+  if (!m) return null;
+
+  const blockStart = m.index;
+  const braceStart = src.indexOf("{", blockStart);
+  if (braceStart < 0) return null;
+
+  let depth = 0;
+  let end = -1;
+
+  for (let i = braceStart; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return null;
+
+  return {
+    start: blockStart,
+    end: end + 1, // inclusive end -> exclusive index
+    indent: m[1] || "",
+    text: src.slice(blockStart, end + 1),
+  };
+}
+
+function upsertSigningConfigLine(buildTypeBlockText, typeName, signingLine) {
+  const typeBlock = findBlock(buildTypeBlockText, typeName);
+  if (!typeBlock) return buildTypeBlockText;
+
+  const headerEnd = typeBlock.text.indexOf("{") + 1;
+  const head = typeBlock.text.slice(0, headerEnd);
+  let body = typeBlock.text.slice(headerEnd, -1); // without last "}"
+
+  // 기존 signingConfig 라인 제거
+  body = body.replace(/^\s*signingConfig\s+signingConfigs\..*$/gm, "").replace(/\n{3,}/g, "\n\n");
+
+  // 들여쓰기 계산 (type 블록 indent + 4칸)
+  const baseIndentMatch = new RegExp(`(^[\\t ]*)${typeName}\\s*\\{`, "m").exec(typeBlock.text);
+  const baseIndent = baseIndentMatch ? baseIndentMatch[1] : "";
+  const innerIndent = baseIndent + "    ";
+
+  // signingConfig 삽입(블록 최상단)
+  const insert = `\n${innerIndent}${signingLine}\n`;
+  const newTypeText = head + insert + body.replace(/^\s*\n/, "\n") + "}";
+
+  // 원본 buildTypes 블록 내에서 교체
+  return (
+    buildTypeBlockText.slice(0, typeBlock.start) +
+    newTypeText +
+    buildTypeBlockText.slice(typeBlock.end)
+  );
+}
+
+module.exports = function withAndroidSigning(config) {
+  return withAppBuildGradle(config, (config) => {
+    if (config.modResults.language !== "groovy") return config;
+
+    let contents = config.modResults.contents;
+
+    // 0) android 블록이 없으면 건드리지 않음
+    const androidBlock = findBlock(contents, "android");
+    if (!androidBlock) {
+      config.modResults.contents = contents;
+      return config;
+    }
+
+    // 1) 기존 signingConfigs 블록은 안전하게 전부 제거(중복/꼬임 방지)
+    contents = removeBlockAll(contents, "signingConfigs");
+
+    // 2) 우리가 원하는 signingConfigs 블록(고정 키) 주입(중복 방지: 키 파일명으로 체크)
+    const signingConfigsText = `
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        release {
+            storeFile file("../../my-release-key.keystore")
+            storePassword "123456"
+            keyAlias "my-key-alias"
+            keyPassword "123456"
+        }
+    }
+`;
+
+    if (!contents.includes("my-release-key.keystore")) {
+      contents = contents.replace(/android\s*\{/, (m) => `${m}${signingConfigsText}`);
+    }
+
+    // 3) buildTypes 블록을 찾아서 debug/release에 signingConfig를 강제 주입(기존 옵션은 유지)
+    const bt = findBlock(contents, "buildTypes");
+    if (bt) {
+      let btText = bt.text;
+
+      // debug / release 블록에 signingConfig 강제
+      btText = upsertSigningConfigLine(btText, "debug", "signingConfig signingConfigs.debug");
+      btText = upsertSigningConfigLine(btText, "release", "signingConfig signingConfigs.release");
+
+      contents = contents.slice(0, bt.start) + btText + contents.slice(bt.end);
+    }
+
+    config.modResults.contents = contents;
+    return config;
+  });
+};
+
+
+================================================================================
+ FILE: withAutoVersion.js
+================================================================================
+
+const fs = require('fs');
+const path = require('path');
+
+global.VERSION_UPDATED = global.VERSION_UPDATED || false;
+
+module.exports = function withAutoVersion(config) {
+  // 1. 핵심 안전장치: 실행 인자에 'prebuild'나 'build'가 포함되어 있는지 확인
+  const isTargetCommand = process.argv.some(arg => 
+    arg.includes('prebuild') || arg.includes('build')
+  );
+
+  // 빌드 관련 명령어가 아니면(예: expo start) 그냥 리턴
+  if (!isTargetCommand || global.VERSION_UPDATED) {
+    return config;
+  }
+
+  const appJsonPath = path.resolve('app.json');
+
+  if (fs.existsSync(appJsonPath)) {
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf-8'));
+    const currentCode = appJson.expo.android?.versionCode || 0;
+    const nextCode = currentCode + 1;
+
+    if (!appJson.expo.android) appJson.expo.android = {};
+    appJson.expo.android.versionCode = nextCode;
+    
+    fs.writeFileSync(appJsonPath, JSON.stringify(appJson, null, 2));
+
+    if (!config.android) config.android = {};
+    config.android.versionCode = nextCode;
+
+    global.VERSION_UPDATED = true;
+    console.log(`🚀 [AutoVersion] 빌드 모드 감지: versionCode를 ${nextCode}로 업데이트했습니다.`);
+  }
+
+  return config;
+};
+
+================================================================================
+ FILE: .vscode\extensions.json
+================================================================================
+
+{ "recommendations": ["expo.vscode-expo-tools"] }
+
+
+================================================================================
+ FILE: .vscode\settings.json
+================================================================================
+
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit",
+    "source.sortMembers": "explicit"
+  }
+}
+
+
+================================================================================
+ FILE: components\external-link.tsx
+================================================================================
+
+import { Href, Link } from 'expo-router';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
+import { type ComponentProps } from 'react';
+
+type Props = Omit<ComponentProps<typeof Link>, 'href'> & { href: Href & string };
+
+export function ExternalLink({ href, ...rest }: Props) {
+  return (
+    <Link
+      target="_blank"
+      {...rest}
+      href={href}
+      onPress={async (event) => {
+        if (process.env.EXPO_OS !== 'web') {
+          // Prevent the default behavior of linking to the default browser on native.
+          event.preventDefault();
+          // Open the link in an in-app browser.
+          await openBrowserAsync(href, {
+            presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+          });
+        }
+      }}
+    />
+  );
+}
+
+
+================================================================================
+ FILE: components\haptic-tab.tsx
+================================================================================
+
+import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { PlatformPressable } from '@react-navigation/elements';
+import * as Haptics from 'expo-haptics';
+
+export function HapticTab(props: BottomTabBarButtonProps) {
+  return (
+    <PlatformPressable
+      {...props}
+      onPressIn={(ev) => {
+        if (process.env.EXPO_OS === 'ios') {
+          // Add a soft haptic feedback when pressing down on the tabs.
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        props.onPressIn?.(ev);
+      }}
+    />
+  );
+}
+
+
+================================================================================
+ FILE: components\hello-wave.tsx
+================================================================================
+
+import Animated from 'react-native-reanimated';
+
+export function HelloWave() {
+  return (
+    <Animated.Text
+      style={{
+        fontSize: 28,
+        lineHeight: 32,
+        marginTop: -6,
+        animationName: {
+          '50%': { transform: [{ rotate: '25deg' }] },
+        },
+        animationIterationCount: 4,
+        animationDuration: '300ms',
+      }}>
+      👋
+    </Animated.Text>
+  );
+}
+
+
+================================================================================
+ FILE: components\parallax-scroll-view.tsx
+================================================================================
+
+import type { PropsWithChildren, ReactElement } from 'react';
+import { StyleSheet } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedRef,
+  useAnimatedStyle,
+  useScrollOffset,
+} from 'react-native-reanimated';
+
+import { ThemedView } from '@/components/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
+
+const HEADER_HEIGHT = 250;
+
+type Props = PropsWithChildren<{
+  headerImage: ReactElement;
+  headerBackgroundColor: { dark: string; light: string };
+}>;
+
+export default function ParallaxScrollView({
+  children,
+  headerImage,
+  headerBackgroundColor,
+}: Props) {
+  const backgroundColor = useThemeColor({}, 'background');
+  const colorScheme = useColorScheme() ?? 'light';
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollOffset = useScrollOffset(scrollRef);
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          translateY: interpolate(
+            scrollOffset.value,
+            [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
+            [-HEADER_HEIGHT / 2, 0, HEADER_HEIGHT * 0.75]
+          ),
+        },
+        {
+          scale: interpolate(scrollOffset.value, [-HEADER_HEIGHT, 0, HEADER_HEIGHT], [2, 1, 1]),
+        },
+      ],
+    };
+  });
+
+  return (
+    <Animated.ScrollView
+      ref={scrollRef}
+      style={{ backgroundColor, flex: 1 }}
+      scrollEventThrottle={16}>
+      <Animated.View
+        style={[
+          styles.header,
+          { backgroundColor: headerBackgroundColor[colorScheme] },
+          headerAnimatedStyle,
+        ]}>
+        {headerImage}
+      </Animated.View>
+      <ThemedView style={styles.content}>{children}</ThemedView>
+    </Animated.ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    height: HEADER_HEIGHT,
+    overflow: 'hidden',
+  },
+  content: {
+    flex: 1,
+    padding: 32,
+    gap: 16,
+    overflow: 'hidden',
+  },
+});
+
+
+================================================================================
+ FILE: components\themed-text.tsx
+================================================================================
+
+import { StyleSheet, Text, type TextProps } from 'react-native';
+
+import { useThemeColor } from '@/hooks/use-theme-color';
+
+export type ThemedTextProps = TextProps & {
+  lightColor?: string;
+  darkColor?: string;
+  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+};
+
+export function ThemedText({
+  style,
+  lightColor,
+  darkColor,
+  type = 'default',
+  ...rest
+}: ThemedTextProps) {
+  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+
+  return (
+    <Text
+      style={[
+        { color },
+        type === 'default' ? styles.default : undefined,
+        type === 'title' ? styles.title : undefined,
+        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
+        type === 'subtitle' ? styles.subtitle : undefined,
+        type === 'link' ? styles.link : undefined,
+        style,
+      ]}
+      {...rest}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  default: {
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  defaultSemiBold: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    lineHeight: 32,
+  },
+  subtitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  link: {
+    lineHeight: 30,
+    fontSize: 16,
+    color: '#0a7ea4',
+  },
+});
+
+
+================================================================================
+ FILE: components\themed-view.tsx
+================================================================================
+
+import { View, type ViewProps } from 'react-native';
+
+import { useThemeColor } from '@/hooks/use-theme-color';
+
+export type ThemedViewProps = ViewProps & {
+  lightColor?: string;
+  darkColor?: string;
+};
+
+export function ThemedView({ style, lightColor, darkColor, ...otherProps }: ThemedViewProps) {
+  const backgroundColor = useThemeColor({ light: lightColor, dark: darkColor }, 'background');
+
+  return <View style={[{ backgroundColor }, style]} {...otherProps} />;
+}
+
+
+================================================================================
+ FILE: components\ui\collapsible.tsx
+================================================================================
+
+import { PropsWithChildren, useState } from 'react';
+import { StyleSheet, TouchableOpacity } from 'react-native';
+
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+
+export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const theme = useColorScheme() ?? 'light';
+
+  return (
+    <ThemedView>
+      <TouchableOpacity
+        style={styles.heading}
+        onPress={() => setIsOpen((value) => !value)}
+        activeOpacity={0.8}>
+        <IconSymbol
+          name="chevron.right"
+          size={18}
+          weight="medium"
+          color={theme === 'light' ? Colors.light.icon : Colors.dark.icon}
+          style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
+        />
+
+        <ThemedText type="defaultSemiBold">{title}</ThemedText>
+      </TouchableOpacity>
+      {isOpen && <ThemedView style={styles.content}>{children}</ThemedView>}
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  heading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  content: {
+    marginTop: 6,
+    marginLeft: 24,
+  },
+});
+
+
+================================================================================
+ FILE: components\ui\icon-symbol.ios.tsx
+================================================================================
+
+import { SymbolView, SymbolViewProps, SymbolWeight } from 'expo-symbols';
+import { StyleProp, ViewStyle } from 'react-native';
+
+export function IconSymbol({
+  name,
+  size = 24,
+  color,
+  style,
+  weight = 'regular',
+}: {
+  name: SymbolViewProps['name'];
+  size?: number;
+  color: string;
+  style?: StyleProp<ViewStyle>;
+  weight?: SymbolWeight;
+}) {
+  return (
+    <SymbolView
+      weight={weight}
+      tintColor={color}
+      resizeMode="scaleAspectFit"
+      name={name}
+      style={[
+        {
+          width: size,
+          height: size,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+
+================================================================================
+ FILE: components\ui\icon-symbol.tsx
+================================================================================
+
+// Fallback for using MaterialIcons on Android and web.
+
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { ComponentProps } from 'react';
+import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
+
+type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+type IconSymbolName = keyof typeof MAPPING;
+
+/**
+ * Add your SF Symbols to Material Icons mappings here.
+ * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
+ * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
+ */
+const MAPPING = {
+  'house.fill': 'home',
+  'paperplane.fill': 'send',
+  'chevron.left.forwardslash.chevron.right': 'code',
+  'chevron.right': 'chevron-right',
+} as IconMapping;
+
+/**
+ * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
+ * This ensures a consistent look across platforms, and optimal resource usage.
+ * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
+ */
+export function IconSymbol({
+  name,
+  size = 24,
+  color,
+  style,
+}: {
+  name: IconSymbolName;
+  size?: number;
+  color: string | OpaqueColorValue;
+  style?: StyleProp<TextStyle>;
+  weight?: SymbolWeight;
+}) {
+  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+}
+
+
+================================================================================
+ FILE: constants\theme.ts
+================================================================================
+
+/**
+ * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
+ * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ */
+
+import { Platform } from 'react-native';
+
+const tintColorLight = '#0a7ea4';
+const tintColorDark = '#fff';
+
+export const Colors = {
+  light: {
+    text: '#11181C',
+    background: '#fff',
+    tint: tintColorLight,
+    icon: '#687076',
+    tabIconDefault: '#687076',
+    tabIconSelected: tintColorLight,
+  },
+  dark: {
+    text: '#ECEDEE',
+    background: '#151718',
+    tint: tintColorDark,
+    icon: '#9BA1A6',
+    tabIconDefault: '#9BA1A6',
+    tabIconSelected: tintColorDark,
+  },
+};
+
+export const Fonts = Platform.select({
+  ios: {
+    /** iOS `UIFontDescriptorSystemDesignDefault` */
+    sans: 'system-ui',
+    /** iOS `UIFontDescriptorSystemDesignSerif` */
+    serif: 'ui-serif',
+    /** iOS `UIFontDescriptorSystemDesignRounded` */
+    rounded: 'ui-rounded',
+    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
+    mono: 'ui-monospace',
+  },
+  default: {
+    sans: 'normal',
+    serif: 'serif',
+    rounded: 'normal',
+    mono: 'monospace',
+  },
+  web: {
+    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    serif: "Georgia, 'Times New Roman', serif",
+    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
+    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  },
+});
+
+
+================================================================================
+ FILE: hooks\use-color-scheme.ts
+================================================================================
+
+export { useColorScheme } from 'react-native';
+
+
+================================================================================
+ FILE: hooks\use-color-scheme.web.ts
+================================================================================
+
+import { useEffect, useState } from 'react';
+import { useColorScheme as useRNColorScheme } from 'react-native';
+
+/**
+ * To support static rendering, this value needs to be re-calculated on the client side for web
+ */
+export function useColorScheme() {
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
+
+  const colorScheme = useRNColorScheme();
+
+  if (hasHydrated) {
+    return colorScheme;
+  }
+
+  return 'light';
+}
+
+
+================================================================================
+ FILE: hooks\use-theme-color.ts
+================================================================================
+
+/**
+ * Learn more about light and dark modes:
+ * https://docs.expo.dev/guides/color-schemes/
+ */
+
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+
+export function useThemeColor(
+  props: { light?: string; dark?: string },
+  colorName: keyof typeof Colors.light & keyof typeof Colors.dark
+) {
+  const theme = useColorScheme() ?? 'light';
+  const colorFromProps = props[theme];
+
+  if (colorFromProps) {
+    return colorFromProps;
+  } else {
+    return Colors[theme][colorName];
+  }
+}
+
+
+================================================================================
+ FILE: plugins\withAndroidQueries.js
+================================================================================
+
+const { withAndroidManifest } = require("@expo/config-plugins");
+
+module.exports = function withAndroidQueries(config) {
+  return withAndroidManifest(config, (config) => {
+    const manifest = config.modResults.manifest;
+
+    // 1. 모든 앱 검색 권한(QUERY_ALL_PACKAGES) 추가 로직
+    if (!manifest["uses-permission"]) {
+      manifest["uses-permission"] = [];
+    }
+
+    const hasQueryPermission = manifest["uses-permission"].some(
+      (p) => p.$["android:name"] === "android.permission.QUERY_ALL_PACKAGES"
+    );
+
+    if (!hasQueryPermission) {
+      manifest["uses-permission"].push({
+        $: { "android:name": "android.permission.QUERY_ALL_PACKAGES" },
+      });
+    }
+
+    // 2. 앱 실행(LAUNCHER) 쿼리 추가 로직
+    if (!manifest.queries) {
+      manifest.queries = [];
+    }
+
+    const hasLauncherQuery = manifest.queries.some((q) => {
+      const intent = q?.intent?.[0];
+      const action = intent?.action?.[0]?.$?.["android:name"];
+      const category = intent?.category?.[0]?.$?.["android:name"];
+      return (
+        action === "android.intent.action.MAIN" &&
+        category === "android.intent.category.LAUNCHER"
+      );
+    });
+
+    if (!hasLauncherQuery) {
+      manifest.queries.push({
+        intent: [
+          {
+            action: [{ $: { "android:name": "android.intent.action.MAIN" } }],
+            category: [{ $: { "android:name": "android.intent.category.LAUNCHER" } }],
+          },
+        ],
+      });
+    }
+
+    return config;
+  });
+};
+
+================================================================================
+ FILE: plugins\withAppSwitch.js
+================================================================================
+
+const { withAndroidManifest, withDangerousMod, withMainApplication } = require("@expo/config-plugins");
+const fs = require("fs");
+const path = require("path");
+
+module.exports = function withAppSwitch(config) {
+  // 1. AndroidManifest.xml 수정
+  config = withAndroidManifest(config, (config) => {
+    const manifest = config.modResults.manifest;
+    const mainApplication = manifest.application[0];
+
+    if (!manifest["uses-permission"]) manifest["uses-permission"] = [];
+    
+    const permissions = [
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+      "android.permission.BIND_ACCESSIBILITY_SERVICE",
+      "android.permission.QUERY_ALL_PACKAGES"
+    ];
+
+    permissions.forEach(perm => {
+      if (!manifest["uses-permission"].some(p => p.$["android:name"] === perm)) {
+        manifest["uses-permission"].push({ $: { "android:name": perm } });
+      }
+    });
+
+    // ✅ [추가] Android 11+ 패키지 가시성: getLaunchIntentForPackage / 타 앱 실행 대비 queries 보장
+    if (!manifest["queries"]) manifest["queries"] = [];
+
+    const hasQuery = (actionName, categoryName, scheme) =>
+      (manifest["queries"] || []).some(q =>
+        (q.intent || []).some(i => {
+          const actions = i.action || [];
+          const categories = i.category || [];
+          const datas = i.data || [];
+          const okAction = actions.some(a => a?.$?.["android:name"] === actionName);
+          const okCategory = categories.some(c => c?.$?.["android:name"] === categoryName);
+          const okScheme = scheme ? datas.some(d => d?.$?.["android:scheme"] === scheme) : true;
+          return okAction && okCategory && okScheme;
+        })
+      );
+
+    if (!hasQuery("android.intent.action.MAIN", "android.intent.category.LAUNCHER", null)) {
+      manifest["queries"].push({
+        intent: [{
+          action: [{ $: { "android:name": "android.intent.action.MAIN" } }],
+          category: [{ $: { "android:name": "android.intent.category.LAUNCHER" } }],
+        }],
+      });
+    }
+
+    if (!hasQuery("android.intent.action.VIEW", "android.intent.category.BROWSABLE", "https")) {
+      manifest["queries"].push({
+        intent: [{
+          action: [{ $: { "android:name": "android.intent.action.VIEW" } }],
+          category: [{ $: { "android:name": "android.intent.category.BROWSABLE" } }],
+          data: [{ $: { "android:scheme": "https" } }],
+        }],
+      });
+    }
+
+    if (!mainApplication.service) mainApplication.service = [];
+
+    const serviceName = ".AppSwitchService"; 
+    let serviceEntry = mainApplication.service.find(s => s.$["android:name"] === serviceName);
+
+    if (!serviceEntry) {
+      serviceEntry = { $: { "android:name": serviceName } };
+      mainApplication.service.push(serviceEntry);
+    }
+
+    serviceEntry.$ = {
+      ...serviceEntry.$,
+      "android:permission": "android.permission.BIND_ACCESSIBILITY_SERVICE",
+      "android:label": "스위칭 서비스",
+      "android:enabled": "true",
+      "android:exported": "true", // 시스템 통로 개방 (반드시 true여야 시스템이 서비스 기동 가능)
+      "android:stopWithTask": "false",
+      "android:foregroundServiceType": "specialUse", 
+    };
+
+    serviceEntry["intent-filter"] = [{ action: [{ $: { "android:name": "android.accessibilityservice.AccessibilityService" } }] }];
+    serviceEntry["meta-data"] = [{ $: { "android:name": "android.accessibilityservice", "android:resource": "@xml/accessibility_service_config" } }];
+
+    return config;
+  });
+
+  // 2. MainApplication.kt 수정
+  config = withMainApplication(config, (config) => {
+    let content = config.modResults.contents;
+    if (!content.includes("add(AppSwitchPackage())")) {
+      content = content.replace(
+        /PackageList\(this\)\.packages\.apply \{/,
+        "PackageList(this).packages.apply {\n                add(AppSwitchPackage())"
+      );
+      if (!content.includes("import com.switching.app.AppSwitchPackage")) {
+        content = content.replace(
+          /package com\.switching\.app/,
+          "package com.switching.app\n\nimport com.switching.app.AppSwitchPackage"
+        );
+      }
+    }
+    config.modResults.contents = content;
+    return config;
+  });
+
+  // 3. 물리적 파일 자동 생성 (볼륨 차단 로직 강화)
+  return withDangerousMod(config, [
+    "android",
+    async (config) => {
+      const projectRoot = config.modRequest.projectRoot;
+      const packagePath = "com/switching/app";
+      const androidPath = path.join(projectRoot, "android/app/src/main/java", packagePath);
+
+      if (!fs.existsSync(androidPath)) {
+        fs.mkdirSync(androidPath, { recursive: true });
+      }
+
+      // [수정 핵심] 볼륨 다운 키의 모든 액션(DOWN/UP)을 가로채 시스템 전파를 막음
+      const serviceCode = `package com.switching.app
+import android.accessibilityservice.AccessibilityService
+import android.view.KeyEvent
+import android.view.accessibility.AccessibilityEvent
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.ReactApplication
+import com.facebook.react.modules.core.DeviceEventManagerModule
+
+class AppSwitchService : AccessibilityService() {
+    override fun onKeyEvent(event: KeyEvent): Boolean {
+        // 1. 저장소에서 활성화 상태 호출
+        val prefs = getSharedPreferences("AppSwitchPrefs", android.content.Context.MODE_PRIVATE)
+        val isEnabled = prefs.getBoolean("isEnabled", false)
+        val targetPackage = prefs.getString("targetPackage", "") ?: "" // ✅ [추가]
+
+        // ✅ [수정] 활성화 + 볼륨다운 + 타겟앱 지정일 때만 가로채기(안 그러면 볼륨만 막히는 현상 발생)
+        if (isEnabled && targetPackage.isNotEmpty() && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+
+                // ✅ [추가] 네이티브에서 즉시 앱 실행 (ReactContext/JS 의존 제거)
+                val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
+                launchIntent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (launchIntent != null) {
+                    startActivity(launchIntent)
+                }
+
+                // (선택) JS에도 이벤트 전달 (있으면 emit, 없어도 앱 실행은 됨)
+                val reactContext = (application as ReactApplication).reactNativeHost.reactInstanceManager.currentReactContext
+                reactContext?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)?.emit("onVolumeDownTrigger", null)
+            }
+            return true // ✅ [유지] 시스템으로 이벤트 전파 차단
+        }
+
+        // 비활성화 상태이거나 타겟앱 미지정/다른 키라면 시스템 기본 동작 수행
+        return super.onKeyEvent(event)
+    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {}
+    override fun onInterrupt() {}
+}`;
+
+      const moduleCode = `package com.switching.app
+import android.content.Intent
+import android.content.pm.PackageManager
+import com.facebook.react.bridge.*
+
+class AppSwitchModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+    override fun getName(): String = "AppSwitchModule"
+
+    @ReactMethod
+    fun getInstalledApps(promise: Promise) {
+        try {
+            val pm = reactApplicationContext.packageManager
+            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            val list = Arguments.createArray()
+            for (app in apps) {
+                if (pm.getLaunchIntentForPackage(app.packageName) != null) {
+                    val map = Arguments.createMap()
+                    map.putString("label", pm.getApplicationLabel(app).toString())
+                    map.putString("packageName", app.packageName)
+                    list.pushMap(map)
+                }
+            }
+            promise.resolve(list)
+        } catch (e: Exception) { promise.reject("ERROR", e.message) }
+    }
+
+    @ReactMethod
+    fun launchApp(packageName: String) {
+        val intent = reactApplicationContext.packageManager.getLaunchIntentForPackage(packageName)
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            reactApplicationContext.startActivity(intent)
+        }
+    }
+        @ReactMethod
+    fun isAccessibilityServiceEnabled(promise: Promise) {
+        val expectedComponentName = android.content.ComponentName(reactApplicationContext, AppSwitchService::class.java)
+        val enabledServices = android.provider.Settings.Secure.getString(reactApplicationContext.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        val isEnabled = enabledServices?.contains(expectedComponentName.flattenToString()) == true
+        promise.resolve(isEnabled)
+    }
+
+    // [추가] 안드로이드 접근성 설정 화면으로 직접 이동
+    @ReactMethod
+    fun openAccessibilitySettings() {
+        val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        reactApplicationContext.startActivity(intent)
+    }
+
+    // [수정] 데이터 저장소(save) 및 호출 통로(get) 구축
+    @ReactMethod
+    fun saveSettings(targetPackage: String, isEnabled: Boolean) {
+        val prefs = reactApplicationContext.getSharedPreferences("AppSwitchPrefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("targetPackage", targetPackage).putBoolean("isEnabled", isEnabled).apply()
+    }
+
+    @ReactMethod
+    fun getSettings(promise: Promise) {
+        val prefs = reactApplicationContext.getSharedPreferences("AppSwitchPrefs", android.content.Context.MODE_PRIVATE)
+        val map = Arguments.createMap()
+        map.putString("targetPackage", prefs.getString("targetPackage", ""))
+        map.putBoolean("isEnabled", prefs.getBoolean("isEnabled", false))
+        promise.resolve(map)
+    }
+
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
+}`;
+
+      const packageCode = `package com.switching.app
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class AppSwitchPackage : ReactPackage {
+    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> = listOf(AppSwitchModule(reactContext))
+    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()
+}`;
+
+      const xmlDir = path.join(projectRoot, "android/app/src/main/res/xml");
+      if (!fs.existsSync(xmlDir)) fs.mkdirSync(xmlDir, { recursive: true });
+      const xmlContent = `<?xml version="1.0" encoding="utf-8"?>
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRequestFilterKeyEvents"
+    android:canRetrieveWindowContent="false"
+    android:canRequestFilterKeyEvents="true"
+    android:description="@string/app_name" />`;
+
+      fs.writeFileSync(path.join(androidPath, "AppSwitchService.kt"), serviceCode);
+      fs.writeFileSync(path.join(androidPath, "AppSwitchModule.kt"), moduleCode);
+      fs.writeFileSync(path.join(androidPath, "AppSwitchPackage.kt"), packageCode);
+      fs.writeFileSync(path.join(xmlDir, "accessibility_service_config.xml"), xmlContent);
+
+      console.log("✅ [withAppSwitch] 모든 로직 통합 수정 완료!");
+      return config;
+    },
+  ]);
+};
+
+================================================================================
+ FILE: scripts\reset-project.js
+================================================================================
+
+#!/usr/bin/env node
+
+/**
+ * This script is used to reset the project to a blank state.
+ * It deletes or moves the /app, /components, /hooks, /scripts, and /constants directories to /app-example based on user input and creates a new /app directory with an index.tsx and _layout.tsx file.
+ * You can remove the `reset-project` script from package.json and safely delete this file after running it.
+ */
+
+const fs = require("fs");
+const path = require("path");
+const readline = require("readline");
+
+const root = process.cwd();
+const oldDirs = ["app", "components", "hooks", "constants", "scripts"];
+const exampleDir = "app-example";
+const newAppDir = "app";
+const exampleDirPath = path.join(root, exampleDir);
+
+const indexContent = `import { Text, View } from "react-native";
+
+export default function Index() {
+  return (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <Text>Edit app/index.tsx to edit this screen.</Text>
+    </View>
+  );
+}
+`;
+
+const layoutContent = `import { Stack } from "expo-router";
+
+export default function RootLayout() {
+  return <Stack />;
+}
+`;
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+const moveDirectories = async (userInput) => {
+  try {
+    if (userInput === "y") {
+      // Create the app-example directory
+      await fs.promises.mkdir(exampleDirPath, { recursive: true });
+      console.log(`📁 /${exampleDir} directory created.`);
+    }
+
+    // Move old directories to new app-example directory or delete them
+    for (const dir of oldDirs) {
+      const oldDirPath = path.join(root, dir);
+      if (fs.existsSync(oldDirPath)) {
+        if (userInput === "y") {
+          const newDirPath = path.join(root, exampleDir, dir);
+          await fs.promises.rename(oldDirPath, newDirPath);
+          console.log(`➡️ /${dir} moved to /${exampleDir}/${dir}.`);
+        } else {
+          await fs.promises.rm(oldDirPath, { recursive: true, force: true });
+          console.log(`❌ /${dir} deleted.`);
+        }
+      } else {
+        console.log(`➡️ /${dir} does not exist, skipping.`);
+      }
+    }
+
+    // Create new /app directory
+    const newAppDirPath = path.join(root, newAppDir);
+    await fs.promises.mkdir(newAppDirPath, { recursive: true });
+    console.log("\n📁 New /app directory created.");
+
+    // Create index.tsx
+    const indexPath = path.join(newAppDirPath, "index.tsx");
+    await fs.promises.writeFile(indexPath, indexContent);
+    console.log("📄 app/index.tsx created.");
+
+    // Create _layout.tsx
+    const layoutPath = path.join(newAppDirPath, "_layout.tsx");
+    await fs.promises.writeFile(layoutPath, layoutContent);
+    console.log("📄 app/_layout.tsx created.");
+
+    console.log("\n✅ Project reset complete. Next steps:");
+    console.log(
+      `1. Run \`npx expo start\` to start a development server.\n2. Edit app/index.tsx to edit the main screen.${
+        userInput === "y"
+          ? `\n3. Delete the /${exampleDir} directory when you're done referencing it.`
+          : ""
+      }`
+    );
+  } catch (error) {
+    console.error(`❌ Error during script execution: ${error.message}`);
+  }
+};
+
+rl.question(
+  "Do you want to move existing files to /app-example instead of deleting them? (Y/n): ",
+  (answer) => {
+    const userInput = answer.trim().toLowerCase() || "y";
+    if (userInput === "y" || userInput === "n") {
+      moveDirectories(userInput).finally(() => rl.close());
+    } else {
+      console.log("❌ Invalid input. Please enter 'Y' or 'N'.");
+      rl.close();
+    }
+  }
+);
+
