@@ -1,0 +1,240 @@
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as NavigationBar from 'expo-navigation-bar';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Alert, // ✅ [추가] 포그라운드/백그라운드 감지 (앱 이탈 시 ON 적용 X + 세션 동기화)
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+  AppState as RNAppState,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import * as IAP from 'react-native-iap';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { AppSwitchModule } = NativeModules;
+const eventEmitter = AppSwitchModule ? new NativeEventEmitter(AppSwitchModule) : null;
+
+const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
+const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
+
+const INTERSTITIAL_REQUEST_OPTIONS = {
+  requestNonPersonalizedAdsOnly: true,
+  maxAdContentRating: 'PG',
+  tagForChildDirectedTreatment: false,
+  tagForUnderAgeOfConsent: false,
+};
+
+// ✅ [추가] 30분 세션 + START 광고 게이트
+const SESSION_START_AT_KEY = 'SWITCHING_SESSION_START_AT';
+const SESSION_DURATION_MS = 30 * 60 * 1000;
+const START_AD_OPEN_TIMEOUT_MS = 1500; // 1~2초 요구사항 반영
+const START_AD_MAX_TRIES = 3; 
+
+interface AppInfo {
+  label: string;
+  packageName: string;
+  iconUri?: string;
+}
+
+interface AppState {
+  targetPackage: string;
+  isEnabled: boolean;
+  isPremium: boolean;
+}
+
+const { width } = Dimensions.get('window');
+
+export default function App() {
+  const [gma, setGma] = useState<any>(null); 
+  const [isEnabled, setIsEnabled] = useState<boolean>(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const hintLoopRef = useRef<any>(null); // ✅ [추가] 힌트 애니메이션 stop 처리용(루프 누수 방지)
+
+  // ✅ [추가] 로고 크로스페이드 진행률(0=청록(app-logo2) → 1=빨강(app-logo))
+  const progressAnim = useRef(new Animated.Value(1)).current;
+  const sessionStartAtRef = useRef<number | null>(null); // ✅ [추가] 30분 세션 시작 시각
+  const sessionOffTimerRef = useRef<any>(null);          // ✅ [추가] 30분 종료 타이머
+  const progressTimerRef = useRef<any>(null);            // ✅ [추가] 진행률 업데이트 타이머
+
+  // ✅ [추가] START 광고 플로우 상태(연타/재시도/앱이탈 처리)
+  const startFlowRef = useRef({
+    isActive: false,
+    tries: 0,
+    adOpened: false,
+    appLeft: false,
+  });
+
+  const startOpenTimeoutRef = useRef<any>(null);         // ✅ [추가] 1~2초 내 광고 미노출 감지
+  const startTapLockRef = useRef<boolean>(false);        // ✅ [추가] 연타 방지
+  const [startWaitModalVisible, setStartWaitModalVisible] = useState(false); // ✅ [추가]
+
+  useEffect(() => {
+    if (!isEnabled) {
+      hintLoopRef.current?.stop?.(); // ✅ [추가]
+      hintLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(fadeAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ])
+      );
+      hintLoopRef.current.start(); // ✅ [수정]
+    } else {
+      hintLoopRef.current?.stop?.(); // ✅ [추가]
+      fadeAnim.setValue(0);
+    }
+
+    return () => {
+      hintLoopRef.current?.stop?.(); // ✅ [추가]
+    };
+  }, [isEnabled]);
+
+  const interstitialRef = useRef<any>(null);
+  const adLoadedRef = useRef<boolean>(false);
+  const pendingSaveRef = useRef<boolean>(false);
+
+  const [appList, setAppList] = useState<AppInfo[]>([]);
+  const [targetPackage, setTargetPackage] = useState<string>('');
+  const [targetLabel, setTargetLabel] = useState<string>('');
+  const [targetIconUri, setTargetIconUri] = useState<string>(''); 
+  const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [adLoaded, setAdLoaded] = useState<boolean>(false);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const stateRef = useRef<AppState>({ targetPackage, isEnabled, isPremium });
+
+  useEffect(() => {
+    stateRef.current = { targetPackage, isEnabled, isPremium };
+  }, [targetPackage, isEnabled, isPremium]);
+
+  // ✅ [추가] 세션/타이머 유틸
+  const clearSessionTimers = () => {
+    if (sessionOffTimerRef.current) {
+      clearTimeout(sessionOffTimerRef.current);
+      sessionOffTimerRef.current = null;
+    }
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  };
+
+  const getProgress = (startAt: number) => {
+    const elapsed = Date.now() - startAt;
+    const raw = elapsed / SESSION_DURATION_MS;
+    return Math.max(0, Math.min(1, raw));
+  };
+
+  const expireSession = async () => {
+    await AsyncStorage.removeItem(SESSION_START_AT_KEY);
+    sessionStartAtRef.current = null;
+    clearSessionTimers();
+    progressAnim.setValue(1);
+
+    // ✅ [추가] 30분 종료 시 자동 OFF (네이티브 설정도 OFF로)
+    setIsEnabled(false);
+    if (AppSwitchModule?.saveSettings) {
+      AppSwitchModule.saveSettings(stateRef.current.targetPackage, false);
+    }
+  };
+
+  const syncSession = async () => {
+    const saved = await AsyncStorage.getItem(SESSION_START_AT_KEY);
+    const startAt = saved ? Number(saved) : null;
+
+    if (!startAt || Number.isNaN(startAt)) {
+      sessionStartAtRef.current = null;
+      clearSessionTimers();
+      progressAnim.setValue(1);
+      return null;
+    }
+
+    const elapsed = Date.now() - startAt;
+    if (elapsed >= SESSION_DURATION_MS) {
+      await expireSession();
+      return null;
+    }
+
+    sessionStartAtRef.current = startAt;
+
+    // ✅ [추가] 진행률 반영(아주 천천히 변화하지만 복귀 시 즉시 정확 보정)
+    const p = getProgress(startAt);
+    Animated.timing(progressAnim, { toValue: p, duration: 250, useNativeDriver: false }).start();
+
+    // ✅ [추가] 정확히 30분에 자동 OFF
+    if (sessionOffTimerRef.current) clearTimeout(sessionOffTimerRef.current);
+    const remain = SESSION_DURATION_MS - (Date.now() - startAt);
+    sessionOffTimerRef.current = setTimeout(() => {
+      void expireSession();
+    }, remain);
+
+    // ✅ [추가] ON일 때 표시를 위해 진행률 주기 업데이트(백그라운드에서는 의미 없음)
+    if (!progressTimerRef.current) {
+      progressTimerRef.current = setInterval(() => {
+        const s = sessionStartAtRef.current;
+        if (!s) return;
+        progressAnim.setValue(getProgress(s));
+      }, 1000);
+    }
+
+    return startAt;
+  };
+
+  const startNewSessionAndEnable = async () => {
+    const now = Date.now();
+    await AsyncStorage.setItem(SESSION_START_AT_KEY, String(now));
+    sessionStartAtRef.current = now;
+
+    // ✅ [추가] ON 시작은 청록부터
+    progressAnim.setValue(0);
+
+    // ✅ [추가] ON으로 저장(프리미엄/광고 완료/광고 우회 포함 공통)
+    setIsEnabled(true);
+    if (AppSwitchModule?.saveSettings) {
+      AppSwitchModule.saveSettings(stateRef.current.targetPackage, true);
+    }
+
+    // ✅ [추가] 타이머 재설정
+    clearSessionTimers();
+    sessionOffTimerRef.current = setTimeout(() => {
+      void expireSession();
+    }, SESSION_DURATION_MS);
+
+    progressTimerRef.current = setInterval(() => {
+      const s = sessionStartAtRef.current;
+      if (!s) return;
+      progressAnim.setValue(getProgress(s));
+    }, 1000);
+  };
+
+  // ✅ [추가] START 광고 요청(1~2초 내 OPENED 안되면 모달, 2회 재시도, 3번째 실패면 그냥 구동)
+  const requestStartWithAdGate = async () => {
+    if (startTapLockRef.current) return; // ✅ [추가] 연타 방지
+    startTapLockRef.current = true;
+    setTimeout(() => { startTapLockRef.current = false; }, 700);
+
+    startFlowRef.current.isActive = true;
+    startFlowRef.current.tries += 1;
+    startFlowRef.current.adOpened = false;
+    startFlowRef.current.appLeft = false;
+
+    const ad = interstitialRef.current;
+
+    if (adLoadedRef.current && ad?.show) {
+      ad.show();
+    } else if (ad?.load) {
+      ad.load(); // LOADED 리스너에서 show 처리
+    }
+
+    if (startOpenTim

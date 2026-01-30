@@ -13,7 +13,6 @@ module.exports = function withAppSwitch(config) {
     const permissions = [
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
-      // ✅ [수정] BIND_ACCESSIBILITY_SERVICE는 uses-permission에 두지 않습니다. (service의 android:permission으로 충분)
       "android.permission.QUERY_ALL_PACKAGES"
     ];
 
@@ -23,10 +22,9 @@ module.exports = function withAppSwitch(config) {
       }
     });
 
-    // ✅ [추가] Android 11+ 패키지 가시성: getLaunchIntentForPackage / 타 앱 실행 대비 queries 보장
-    if (!manifest["queries"] || !manifest["queries"].length) manifest["queries"] = [{}]; // ✅ [수정]
-    const queriesNode = manifest["queries"][0]; // ✅ [추가]
-    if (!queriesNode.intent) queriesNode.intent = []; // ✅ [추가]
+    if (!manifest["queries"] || !manifest["queries"].length) manifest["queries"] = [{}];
+    const queriesNode = manifest["queries"][0];
+    if (!queriesNode.intent) queriesNode.intent = [];
 
     const hasQuery = (actionName, categoryName, scheme) =>
       (queriesNode.intent || []).some(i => {
@@ -40,7 +38,7 @@ module.exports = function withAppSwitch(config) {
       });
 
     if (!hasQuery("android.intent.action.MAIN", "android.intent.category.LAUNCHER", null)) {
-      queriesNode.intent.push({ // ✅ [수정]
+      queriesNode.intent.push({
         action: [{ $: { "android:name": "android.intent.action.MAIN" } }],
         category: [{ $: { "android:name": "android.intent.category.LAUNCHER" } }],
       });
@@ -71,7 +69,7 @@ module.exports = function withAppSwitch(config) {
       "android:permission": "android.permission.BIND_ACCESSIBILITY_SERVICE",
       "android:label": "스위칭 서비스",
       "android:enabled": "true",
-      "android:exported": "true", // 시스템 통로 개방 (반드시 true여야 시스템이 서비스 기동 가능)
+      "android:exported": "true", 
       "android:stopWithTask": "false",
       "android:foregroundServiceType": "specialUse", 
     };
@@ -114,7 +112,7 @@ module.exports = function withAppSwitch(config) {
     return config;
   });
 
-    // 3. 물리적 파일 자동 생성 (볼륨 차단 로직 강화)
+    // 3. 물리적 파일 자동 생성
   return withDangerousMod(config, [
     "android",
     async (config) => {
@@ -126,11 +124,17 @@ module.exports = function withAppSwitch(config) {
         fs.mkdirSync(androidPath, { recursive: true });
       }
 
-      // ✅ [추가] Java 모듈이 남아있으면 Redeclaration 방지를 위해 자동 삭제
-      const javaModulePath = path.join(androidPath, "AppSwitchModule.java");
-      if (fs.existsSync(javaModulePath)) fs.unlinkSync(javaModulePath);
+      const legacyJavaFiles = [
+        "AppSwitchModule.java",
+        "AppSwitchService.java",
+        "AppSwitchPackage.java",
+      ];
+      legacyJavaFiles.forEach((f) => {
+        const p = path.join(androidPath, f);
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      });
 
-           // [서비스] 볼륨다운 가로채기 + JS 이벤트 emit
+      // ✅ [최종 수정] 패스스루 방식 (AudioManager 제거, return true 제거)
       const serviceCode = `package com.switching.app
 
 import android.accessibilityservice.AccessibilityService
@@ -153,6 +157,8 @@ class AppSwitchService : AccessibilityService() {
         val targetPackage = prefs.getString("targetPackage", "") ?: ""
 
         if (isEnabled && targetPackage.isNotEmpty() && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            
+            // 1. 키를 누르는 순간 (ACTION_DOWN) 앱 실행 시도 (Side Effect)
             if (event.action == KeyEvent.ACTION_DOWN) {
                 val intent = packageManager.getLaunchIntentForPackage(targetPackage)
                 if (intent != null) {
@@ -164,7 +170,9 @@ class AppSwitchService : AccessibilityService() {
                     startActivity(intent)
                 }
             }
-            return true
+
+            // 2. [핵심] 여기서 return true를 하지 않습니다!
+            // return super.onKeyEvent(event)를 호출하여 시스템이 이벤트를 "정상 처리(볼륨 다운)"하게 둡니다.
         }
 
         return super.onKeyEvent(event)
