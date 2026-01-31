@@ -486,7 +486,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 80 
+    // ✅ [수정] 상단 여백을 주어 컨텐츠 전체를 아래로 끄집어 내립니다. (수치를 조절해 높낮이 변경 가능)
+    paddingTop: 110, 
   },
   logoContainer: {
     marginBottom: 25,
@@ -542,20 +543,21 @@ const styles = StyleSheet.create({
   arrowText: { color: '#444', fontSize: 20 },
 
   footerArea: {
-    position: 'absolute',
-    bottom: Platform.OS === 'android' ? 200 :190, 
     width: '100%',
     alignItems: 'center',
-    zIndex: 20
+    justifyContent: 'center',
+    // ✅ [수정] 여백을 40 -> 20으로 줄여서 메인 컨텐츠 공간을 확보하되, 광고와는 떨어뜨림
+    paddingVertical: 90, 
+    backgroundColor: 'transparent',
   },
   fabButton: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     paddingVertical: 10,
-    paddingHorizontal: 40,       
+    paddingHorizontal: 40,        
     borderRadius: 4,              
     alignItems: 'center',
-    borderWidth: 0.9,           
+    borderWidth: 0.9,            
     borderColor: '#49a0c2',          
   },
   fabIcon: { display: 'none' },   
@@ -563,7 +565,7 @@ const styles = StyleSheet.create({
     color: '#c8d0d4',             
     fontSize: 12, 
     fontWeight: '400',            
-    letterSpacing: 2,            
+    letterSpacing: 2,             
     textTransform: 'uppercase'
   },
 
