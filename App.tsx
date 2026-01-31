@@ -4,11 +4,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  DeviceEventEmitter,
   Dimensions,
   FlatList,
   Image,
   Modal,
-  NativeEventEmitter,
   NativeModules,
   Platform,
   StatusBar,
@@ -21,7 +21,7 @@ import * as IAP from 'react-native-iap';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { AppSwitchModule } = NativeModules;
-const eventEmitter = AppSwitchModule ? new NativeEventEmitter(AppSwitchModule) : null;
+const eventEmitter = DeviceEventEmitter;
 
 const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
 const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
@@ -48,7 +48,7 @@ interface AppState {
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [gma, setGma] = useState<any>(null); 
+  const [gma, setGma] = useState<any>(null);
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -64,6 +64,7 @@ export default function App() {
       fadeAnim.setValue(0);
     }
   }, [isEnabled]);
+
   const interstitialRef = useRef<any>(null);
   const adLoadedRef = useRef<boolean>(false);
   const pendingSaveRef = useRef<boolean>(false);
@@ -71,7 +72,7 @@ export default function App() {
   const [appList, setAppList] = useState<AppInfo[]>([]);
   const [targetPackage, setTargetPackage] = useState<string>('');
   const [targetLabel, setTargetLabel] = useState<string>('');
-  const [targetIconUri, setTargetIconUri] = useState<string>(''); 
+  const [targetIconUri, setTargetIconUri] = useState<string>('');
   const [isPremium, setIsPremium] = useState<boolean>(false);
   const [adLoaded, setAdLoaded] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
@@ -83,7 +84,7 @@ export default function App() {
     stateRef.current = { targetPackage, isEnabled, isPremium };
   }, [targetPackage, isEnabled, isPremium]);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (!targetPackage || !appList.length) return;
     const found = appList.find((a) => a.packageName === targetPackage);
     if (!found) return;
@@ -93,10 +94,10 @@ export default function App() {
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-  StatusBar.setTranslucent(true);
-  StatusBar.setBackgroundColor("transparent");
-  NavigationBar.setButtonStyleAsync("light");
-}
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor("transparent");
+      NavigationBar.setButtonStyleAsync("light");
+    }
 
     const checkSubscription = async () => {
       try {
@@ -110,36 +111,36 @@ export default function App() {
     };
     checkSubscription();
 
-     let mounted = true; 
-    let unsubscribeLoaded: any = null; 
-    let unsubscribeClosed: any = null; 
-    let unsubscribeError: any = null; 
+    let mounted = true;
+    let unsubscribeLoaded: any = null;
+    let unsubscribeClosed: any = null;
+    let unsubscribeError: any = null;
 
-    const t = setTimeout(async () => { 
+    const t = setTimeout(async () => {
       try {
-        const mod = require('react-native-google-mobile-ads'); 
+        const mod = require('react-native-google-mobile-ads');
         await mod.default().initialize();
         if (!mounted) return;
 
-        setGma(mod); 
+        setGma(mod);
 
         const ad = mod.InterstitialAd.createForAdRequest(
           INTERSTITIAL_ID,
           INTERSTITIAL_REQUEST_OPTIONS
-        ); 
-        interstitialRef.current = ad; 
+        );
+        interstitialRef.current = ad;
 
         unsubscribeLoaded = ad.addAdEventListener(mod.AdEventType.LOADED, () => {
-          adLoadedRef.current = true; 
+          adLoadedRef.current = true;
           setAdLoaded(true);
 
           if (pendingSaveRef.current && interstitialRef.current?.show) {
             interstitialRef.current.show();
           }
-        }); 
+        });
 
         unsubscribeClosed = ad.addAdEventListener(mod.AdEventType.CLOSED, () => {
-          adLoadedRef.current = false; 
+          adLoadedRef.current = false;
           setAdLoaded(false);
 
           if (pendingSaveRef.current) {
@@ -148,34 +149,36 @@ export default function App() {
           }
 
           ad.load();
-        }); 
-
-        unsubscribeError = ad.addAdEventListener(mod.AdEventType.ERROR, (err: any) => { 
-          adLoadedRef.current = false; 
-          setAdLoaded(false);
-          pendingSaveRef.current = false;
-          console.warn("Interstitial ERROR:", err); 
         });
 
-        ad.load(); 
+        unsubscribeError = ad.addAdEventListener(mod.AdEventType.ERROR, (err: any) => {
+          adLoadedRef.current = false;
+          setAdLoaded(false);
+          pendingSaveRef.current = false;
+          console.warn("Interstitial ERROR:", err);
+        });
+
+        ad.load();
       } catch (e) {
-        console.warn("GMA init skipped (runtime not ready):", e); 
+        console.warn("GMA init skipped (runtime not ready):", e);
       }
     }, 0);
 
-    const volumeMod = NativeModules?.AppSwitchModule;
-    const volumeEmitter = volumeMod ? new NativeEventEmitter(volumeMod) : null;
-    const volumeListener = volumeEmitter?.addListener('onVolumeDownTrigger', handleVolumeDownTrigger);
+    const volumeListener =
+      Platform.OS === 'android'
+        ? DeviceEventEmitter.addListener('onVolumeDownTrigger', handleVolumeDownTrigger)
+        : null;
 
     return () => {
-      mounted = false; 
-      clearTimeout(t); 
-    try { unsubscribeLoaded && unsubscribeLoaded(); } catch {} 
-      try { unsubscribeClosed && unsubscribeClosed(); } catch {} 
-      try { unsubscribeError && unsubscribeError(); } catch {} 
-      adLoadedRef.current = false; 
-      interstitialRef.current = null; 
-      volumeListener?.remove();      IAP.endConnection();
+      mounted = false;
+      clearTimeout(t);
+      try { unsubscribeLoaded && unsubscribeLoaded(); } catch {}
+      try { unsubscribeClosed && unsubscribeClosed(); } catch {}
+      try { unsubscribeError && unsubscribeError(); } catch {}
+      adLoadedRef.current = false;
+      interstitialRef.current = null;
+      volumeListener?.remove();
+      IAP.endConnection();
     };
   }, []);
 
@@ -186,7 +189,7 @@ export default function App() {
           setTargetPackage(res.targetPackage || '');
           setIsEnabled(res.isEnabled || false);
         }
-      });
+      }).catch(console.error);
     }
 
     if (AppSwitchModule?.getInstalledApps) {
@@ -204,7 +207,7 @@ export default function App() {
     }
   }, []);
 
-    const handleVolumeDownTrigger = async () => {
+  async function handleVolumeDownTrigger() {
     const { targetPackage: pkg, isEnabled: enabled, isPremium: premium } = stateRef.current;
 
     if (!enabled || !pkg) return;
@@ -228,7 +231,7 @@ export default function App() {
         launchTargetApp();
       }
     }
-  };
+  }
 
   const launchTargetApp = () => {
     const { targetPackage: pkg } = stateRef.current;
@@ -236,7 +239,6 @@ export default function App() {
       AppSwitchModule.launchApp(pkg);
     }
   };
-
 
   const handleSaveWithLogic = async () => {
     if (!targetPackage) {
@@ -286,7 +288,7 @@ export default function App() {
               { text: "설정 이동", onPress: () => AppSwitchModule.openAccessibilitySettings() }
             ]
           );
-          return; 
+          return;
         }
       }
     }
@@ -306,7 +308,7 @@ export default function App() {
       onPress={() => {
         setTargetPackage(item.packageName);
         setTargetLabel(item.label);
-        setTargetIconUri(item.iconUri || ''); 
+        setTargetIconUri(item.iconUri || '');
         setModalVisible(false);
       }}
     >
@@ -398,14 +400,14 @@ export default function App() {
                   </View>
               </TouchableOpacity>
           </View>
-        </View>
-
+        
         <View style={styles.footerArea}>
           <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
               <Text style={styles.fabIcon}>💾</Text>
               <Text style={styles.fabText}>Save</Text>
           </TouchableOpacity>
         </View>
+      </View>
 
 
         <View style={styles.adContainer}>
@@ -486,8 +488,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    // ✅ [수정] 상단 여백을 주어 컨텐츠 전체를 아래로 끄집어 내립니다. (수치를 조절해 높낮이 변경 가능)
-    paddingTop: 110, 
+    paddingTop: 50,
   },
   logoContainer: {
     marginBottom: 25,
@@ -546,18 +547,17 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    // ✅ [수정] 여백을 40 -> 20으로 줄여서 메인 컨텐츠 공간을 확보하되, 광고와는 떨어뜨림
-    paddingVertical: 90, 
-    backgroundColor: 'transparent',
+    marginTop: 40, // 카드와의 간격 조절
+    zIndex: 20
   },
   fabButton: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     paddingVertical: 10,
-    paddingHorizontal: 40,        
+    paddingHorizontal: 40,       
     borderRadius: 4,              
     alignItems: 'center',
-    borderWidth: 0.9,            
+    borderWidth: 0.9,           
     borderColor: '#49a0c2',          
   },
   fabIcon: { display: 'none' },   

@@ -23,7 +23,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.switching.app",
-      "versionCode": 11,
+      "versionCode": 12,
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-5144004139813427~5730965404"
       },
