@@ -52,26 +52,17 @@ export default function App() {
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // [수정] 애니메이션 로직 강화: 꺼지면 0으로 강제 고정
   useEffect(() => {
-    let animation = null;
     if (!isEnabled) {
-      // 1. 꺼져있을 때 (Offline): 깜빡임 시작
-      animation = Animated.loop(
+      Animated.loop(
         Animated.sequence([
           Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
           Animated.timing(fadeAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
         ])
-      );
-      animation.start();
+      ).start();
     } else {
-      // 2. 켜졌을 때 (Online): 애니메이션 멈추고 투명도 0으로 강제 고정
-      fadeAnim.stopAnimation();
       fadeAnim.setValue(0);
     }
-    return () => {
-        if(animation) animation.stop();
-    };
   }, [isEnabled]);
 
   const interstitialRef = useRef<any>(null);
@@ -352,15 +343,6 @@ export default function App() {
 
         <View style={styles.mainContent}>
 
-          {/* [수정] style에서 조건문을 빼고, 애니메이션 값(fadeAnim)만 바라보게 변경 */}
-          <Animated.View 
-            style={[styles.hintContainer, { opacity: fadeAnim }]}
-            pointerEvents={isEnabled ? 'none' : 'auto'}
-          >
-            <Text style={styles.handEmoji}>👇 </Text>
-            <Text style={styles.hintText}>TAP to{"\n"}START</Text>
-          </Animated.View>
-          
           <TouchableOpacity 
               onPress={toggleEnabledByLogo} 
               activeOpacity={0.9} 
@@ -411,8 +393,7 @@ export default function App() {
                   </View>
               </TouchableOpacity>
           </View>
-          
-          {/* ✅ [이동됨] 카드 컨테이너 바로 아래로 이동 */}
+
           <View style={styles.footerArea}>
             <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
                 <Text style={styles.fabIcon}>💾</Text>
@@ -483,7 +464,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: Platform.OS === 'android'
       ? (StatusBar.currentHeight || 20) + 5
-      : 10 + 12,                                  
+      : 10 + 12,
     zIndex: 10
   },
   premiumBadge: {
@@ -512,6 +493,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 40,
+    marginTop: 90,
     elevation: 25,
   },
   statusLabel: {
@@ -555,7 +537,7 @@ const styles = StyleSheet.create({
   cardArrow: { paddingLeft: 10 },
   arrowText: { color: '#444', fontSize: 20 },
 
-  footerArea: {    
+  footerArea: {
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 50,
@@ -624,25 +606,4 @@ const styles = StyleSheet.create({
   appPackage: { fontSize: 11, color: '#555', marginTop: 2 },
   checkIcon: { color: '#007AFF', fontWeight: 'bold', fontSize: 16, position: 'absolute', right: 15 },
   emptyText: { color: '#444', textAlign: 'center', marginTop: 50, fontSize: 12 },
-  hintContainer: {
-    position: 'absolute',
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    top: 80,            
-    right: '12%',        
-    zIndex: 30,
-  },
-  hintText: {
-    color: '#cccccc',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textAlign: 'left',    
-    lineHeight: 12,       
-    marginLeft: -4,
-  },
-  handEmoji: {
-    fontSize: 20,
-    transform: [{ rotate: '45deg' }],
-    },
 });
