@@ -2,13 +2,14 @@
 import * as NavigationBar from 'expo-navigation-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
+  BackHandler,
   DeviceEventEmitter,
   Dimensions,
   FlatList,
   Image,
-  Modal,
+  Linking,
+  LogBox,
   NativeModules,
   Platform,
   StatusBar,
@@ -32,6 +33,7 @@ const AD_REQUEST_OPTIONS = {
 
 const SESSION_START_AT_KEY = 'SWITCHING_SESSION_START_AT';
 const SESSION_DURATION_MS = 60 * 60 * 1000;
+const BATTERY_OPT_PROMPTED_KEY = 'SWITCHING_BATTERY_OPT_PROMPTED';
 
 interface AppInfo {
   label: string;
@@ -45,7 +47,22 @@ interface AppState {
   isPremium: boolean;
 }
 
+type AlertBtnStyle = 'default' | 'cancel' | 'destructive';
+
+interface CustomAlertButton {
+  text: string;
+  onPress?: () => void;
+  style?: AlertBtnStyle;
+}
+
 const { width } = Dimensions.get('window');
+
+if (__DEV__) {
+  LogBox.ignoreLogs([
+    '`setBackgroundColorAsync` is not supported with edge-to-edge enabled.',
+    'The app is running using the Legacy Architecture.',
+  ]);
+}
 
 export default function App() {
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
@@ -53,6 +70,14 @@ export default function App() {
   const adLoadedRef = useRef<boolean>(false);
   const pendingSaveRef = useRef<boolean>(false);
   const pendingStartRef = useRef<boolean>(false);
+  const adGateInFlightRef = useRef<boolean>(false);
+  const batteryBypassOnceRef = useRef<boolean>(false);
+
+  const resetAdGateState = () => {
+    pendingSaveRef.current = false;
+    pendingStartRef.current = false;
+    adGateInFlightRef.current = false;
+  };
 
   const [appList, setAppList] = useState<AppInfo[]>([]);
   const [targetPackage, setTargetPackage] = useState<string>('');
@@ -63,12 +88,23 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
 
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertButtons, setAlertButtons] = useState<CustomAlertButton[]>([{ text: '확인' }]);
+
   const stateRef = useRef<AppState>({ targetPackage, isEnabled, isPremium });
 
   const progressAnim = useRef(new Animated.Value(1)).current;
   const sessionStartAtRef = useRef<number | null>(null);
   const sessionOffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+  const [overlayActive, setOverlayActive] = useState(false);
+
+  const alertAnim = useRef(new Animated.Value(0)).current;
+  const [alertActive, setAlertActive] = useState(false);
 
   const logo2Opacity = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -87,6 +123,92 @@ export default function App() {
     extrapolate: 'clamp',
   });
 
+  const showAlert = (title: string, message?: string, buttons?: CustomAlertButton[]) => {
+    setAlertTitle(title || '');
+    setAlertMessage(message || '');
+    const b = buttons && buttons.length ? buttons : [{ text: '확인' }];
+    setAlertButtons(b);
+    setAlertVisible(true);
+  };
+
+  const hideAlert = () => {
+    setAlertVisible(false);
+  };
+
+  const pressAlertButton = (btn: CustomAlertButton) => {
+    setAlertVisible(false);
+    try {
+      btn.onPress && btn.onPress();
+    } catch {}
+  };
+
+  const openBatteryOptimizationSettings = async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      if (AppSwitchModule?.openBatteryOptimizationSettings) {
+        await AppSwitchModule.openBatteryOptimizationSettings();
+        return;
+      }
+    } catch {}
+    try {
+      await Linking.openSettings();
+    } catch {}
+  };
+
+  const ensureBatteryOptimizationIgnored = async () => {
+    if (Platform.OS !== 'android') return true;
+
+    let ignored: boolean | null = null;
+    try {
+      if (AppSwitchModule?.isBatteryOptimizationIgnored) {
+        ignored = await AppSwitchModule.isBatteryOptimizationIgnored();
+      }
+    } catch {}
+
+    if (ignored === null) {
+      const prompted = await AsyncStorage.getItem(BATTERY_OPT_PROMPTED_KEY);
+      if (prompted === '1') return true;
+
+      resetAdGateState();
+      showAlert(
+        "배터리 최적화 해제 권장",
+        "백그라운드에서 안정적으로 동작하려면 배터리 최적화를 해제하는 것이 좋습니다.\n\n[설정 이동]에서 이 앱의 배터리 사용을 '제한 없음'으로 변경해주세요.",
+        [
+          {
+            text: "나중에",
+            style: "cancel",
+            onPress: () => {
+              void AsyncStorage.setItem(BATTERY_OPT_PROMPTED_KEY, '1');
+              batteryBypassOnceRef.current = true;
+              setTimeout(() => { void toggleEnabledByLogo(); }, 0);
+            }
+          },
+          {
+            text: "설정 이동",
+            onPress: () => {
+              void AsyncStorage.setItem(BATTERY_OPT_PROMPTED_KEY, '1');
+              void openBatteryOptimizationSettings();
+            }
+          }
+        ]
+      );
+      return false;
+    }
+
+    if (ignored) return true;
+
+    resetAdGateState();
+    showAlert(
+      "배터리 최적화 해제 필요",
+      "백그라운드에서 안정적으로 동작하려면 배터리 최적화를 해제해야 합니다.\n\n[설정 이동]에서 이 앱의 배터리 사용을 '제한 없음'으로 변경해주세요.",
+      [
+        { text: "나중에", style: "cancel" },
+        { text: "설정 이동", onPress: () => { void openBatteryOptimizationSettings(); } }
+      ]
+    );
+    return false;
+  };
+
   useEffect(() => {
     stateRef.current = { targetPackage, isEnabled, isPremium };
   }, [targetPackage, isEnabled, isPremium]);
@@ -98,6 +220,50 @@ export default function App() {
     setTargetLabel(found.label || '');
     setTargetIconUri(found.iconUri || '');
   }, [targetPackage, appList]);
+
+  useEffect(() => {
+    if (modalVisible) {
+      setOverlayActive(true);
+      Animated.timing(overlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(overlayAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) setOverlayActive(false);
+      });
+    }
+  }, [modalVisible, overlayAnim]);
+
+  useEffect(() => {
+    if (alertVisible) {
+      setAlertActive(true);
+      Animated.timing(alertAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(alertAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) setAlertActive(false);
+      });
+    }
+  }, [alertVisible, alertAnim]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (alertActive) {
+        hideAlert();
+        return true;
+      }
+      if (overlayActive) {
+        setModalVisible(false);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [alertActive, overlayActive]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      void NavigationBar.setButtonStyleAsync("light");
+    }
+  }, [overlayActive, alertActive]);
 
   const clearSessionTimers = () => {
     if (sessionOffTimerRef.current) {
@@ -194,19 +360,24 @@ export default function App() {
   const requestStartWithAdGate = async () => {
     const ad = interstitialRef.current;
 
+    if (adGateInFlightRef.current) return;
+
     if (!ad?.show || !ad?.load) {
-      Alert.alert("알림", "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      resetAdGateState();
+      showAlert("알림", "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
       return;
     }
 
+    adGateInFlightRef.current = true;
     pendingSaveRef.current = false;
     pendingStartRef.current = true;
 
     if (adLoadedRef.current) {
+      setAlertVisible(false);
       ad.show();
     } else {
       ad.load();
-      Alert.alert("알림", "광고 로딩 중입니다. 잠시만 기다려주세요.");
+      showAlert("알림", "광고 로딩 중입니다. 잠시만 기다려주세요.");
     }
   };
 
@@ -219,10 +390,13 @@ export default function App() {
 
     async function initializeApp() {
       try {
+        try {
+          await AsyncStorage.removeItem(BATTERY_OPT_PROMPTED_KEY);
+        } catch {}
+
         if (Platform.OS === 'android') {
           StatusBar.setTranslucent(true);
           StatusBar.setBackgroundColor("transparent");
-          NavigationBar.setBackgroundColorAsync("#000000");
           NavigationBar.setButtonStyleAsync("light");
         }
 
@@ -251,10 +425,10 @@ export default function App() {
             adLoadedRef.current = true;
             if (mounted) setAdLoaded(true);
 
-            if (pendingSaveRef.current && interstitialRef.current?.show) {
-              interstitialRef.current.show();
-            }
-            if (pendingStartRef.current && interstitialRef.current?.show) {
+            if (!adGateInFlightRef.current) return;
+
+            if ((pendingSaveRef.current || pendingStartRef.current) && interstitialRef.current?.show) {
+              setAlertVisible(false);
               interstitialRef.current.show();
             }
           });
@@ -273,6 +447,7 @@ export default function App() {
               void startNewSessionAndEnable();
             }
 
+            adGateInFlightRef.current = false;
             ad.load();
           });
 
@@ -280,8 +455,7 @@ export default function App() {
             console.warn("Ad Error:", err);
             adLoadedRef.current = false;
             if (mounted) setAdLoaded(false);
-            pendingSaveRef.current = false;
-            pendingStartRef.current = false;
+            resetAdGateState();
           });
 
           ad.load();
@@ -354,29 +528,12 @@ export default function App() {
   }, []);
 
   async function handleVolumeDownTrigger() {
-    const { targetPackage: pkg, isEnabled: enabled, isPremium: premium } = stateRef.current;
+    const { targetPackage: pkg, isEnabled: enabled } = stateRef.current;
 
     if (!enabled || !pkg) return;
 
-    if (premium) {
-      launchTargetApp();
-      return;
-    }
-
-    const lastAdTime = await AsyncStorage.getItem('last_ad_time');
-    const now = Date.now();
-    const oneHour = 60 * 60 * 1000;
-
-    if (lastAdTime && now - parseInt(lastAdTime) < oneHour) {
-      launchTargetApp();
-    } else {
-      if (adLoadedRef.current && interstitialRef.current?.show) {
-        await AsyncStorage.setItem('last_ad_time', now.toString());
-        interstitialRef.current.show();
-      } else {
-        launchTargetApp();
-      }
-    }
+    // ✅ [수정] 볼륨다운 트리거에서는 광고 없이 즉시 실행
+    launchTargetApp();
   }
 
   const launchTargetApp = () => {
@@ -388,7 +545,7 @@ export default function App() {
 
   const handleSaveWithLogic = async () => {
     if (!targetPackage) {
-      Alert.alert("알림", "앱을 선택해주세요.");
+      showAlert("알림", "앱을 선택해주세요.");
       return;
     }
 
@@ -397,37 +554,44 @@ export default function App() {
       return;
     }
 
+    if (adGateInFlightRef.current) return;
+
     const ad = interstitialRef.current;
 
     if (!adLoadedRef.current) {
       ad?.load();
-      Alert.alert("알림", "광고를 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
+      showAlert("알림", "광고를 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
       return;
     }
 
+    adGateInFlightRef.current = true;
     pendingStartRef.current = false;
     pendingSaveRef.current = true;
+    setAlertVisible(false);
     ad.show();
   };
 
   const saveSettings = () => {
     if (AppSwitchModule?.saveSettings) {
       AppSwitchModule.saveSettings(targetPackage, isEnabled);
-      Alert.alert("저장 성공", `[${targetLabel}] 설정이 시스템에 반영되었습니다.`);
+      showAlert("저장 성공", ` 설정이 시스템에 반영되었습니다.`);
     }
   };
 
   const toggleEnabledByLogo = async () => {
     if (!targetPackage) {
-      Alert.alert("알림", "앱을 선택해주세요.");
+      showAlert("알림", "앱을 선택해주세요.");
       return;
     }
 
     if (!isEnabled) {
+      if (adGateInFlightRef.current) return;
+
       if (AppSwitchModule?.isAccessibilityServiceEnabled) {
         const isGranted = await AppSwitchModule.isAccessibilityServiceEnabled();
         if (!isGranted) {
-          Alert.alert(
+          resetAdGateState();
+          showAlert(
             "접근성 권한 필요",
             "볼륨 키를 감지하려면 접근성 권한이 필요합니다.\n\n[설정 이동] 후 '설치된 앱' 목록에서 [스위칭 서비스]를 '사용'으로 바꿔주세요.",
             [
@@ -437,6 +601,13 @@ export default function App() {
           );
           return;
         }
+      }
+
+      if (!batteryBypassOnceRef.current) {
+        const okBattery = await ensureBatteryOptimizationIgnored();
+        if (!okBattery) return;
+      } else {
+        batteryBypassOnceRef.current = false;
       }
     }
 
@@ -488,6 +659,11 @@ export default function App() {
     </TouchableOpacity>
   );
 
+  const alertHasTwo = alertButtons.length >= 2;
+  const primaryIndex = alertHasTwo ? 1 : 0;
+  const primaryBtn = alertButtons[primaryIndex] || { text: '확인' };
+  const secondaryBtn = alertHasTwo ? alertButtons[0] : null;
+
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
@@ -525,30 +701,34 @@ export default function App() {
               activeOpacity={0.9}
               style={[styles.logoContainer, isEnabled && styles.logoGlow]}
             >
-              {isEnabled ? (
-                <View style={styles.logoStack}>
-                  <Animated.Image
-                    source={require('./assets/app-logo2.png')}
-                    style={[styles.logoImage, styles.logoAbsolute, { opacity: logo2Opacity }]}
-                    resizeMode="contain"
-                  />
-                  <Animated.Image
-                    source={require('./assets/app-logo.png')}
-                    style={[styles.logoImage, styles.logoAbsolute, { opacity: logoOpacity }]}
-                    resizeMode="contain"
-                  />
-                </View>
-              ) : (
+              <View style={styles.logoStack}>
                 <Image
                   source={require('./assets/app-logo.png')}
-                  style={[styles.logoImage, { opacity: 0.4 }]}
+                  style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? 0 : 0.4 }]}
                   resizeMode="contain"
                 />
-              )}
+                <Animated.Image
+                  source={require('./assets/app-logo2.png')}
+                  style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? (logo2Opacity as any) : 0 }]}
+                  resizeMode="contain"
+                />
+                <Animated.Image
+                  source={require('./assets/app-logo.png')}
+                  style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? (logoOpacity as any) : 0 }]}
+                  resizeMode="contain"
+                />
+              </View>
             </TouchableOpacity>
 
             <Text style={[styles.statusLabel, { color: isEnabled ? '#1dd4f5' : '#555' }]}>
               {isEnabled ? "System Online" : "System Offline"}
+            </Text>
+
+            <Text
+              pointerEvents="none"
+              style={[styles.tapToStartHint, { opacity: isEnabled ? 0 : 1 }]} // ✅ [수정] Online/Offline 밑으로 위치 이동
+            >
+              ▲ TAB TO START ▲
             </Text>
 
             <View style={styles.cardContainer}>
@@ -583,42 +763,11 @@ export default function App() {
             </View>
 
             <View style={styles.footerArea}>
-              <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
-                <Text style={styles.fabIcon}>💾</Text>
+              <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>                
                 <Text style={styles.fabText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
-
-          <Modal
-            animationType="fade"
-            transparent={true}
-            visible={modalVisible}
-            onRequestClose={() => setModalVisible(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Select App</Text>
-                  <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                    <Text style={styles.closeText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                {loading ? (
-                  <Text style={styles.emptyText}>Loading apps...</Text>
-                ) : (
-                  <FlatList
-                    data={appList}
-                    renderItem={renderItem}
-                    keyExtractor={(item) => item.packageName}
-                    contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
-                    indicatorStyle="white"
-                  />
-                )}
-              </View>
-            </View>
-          </Modal>
         </SafeAreaView>
 
         <SafeAreaView style={styles.adSafeArea} edges={['bottom']}>
@@ -630,6 +779,74 @@ export default function App() {
             />
           </View>
         </SafeAreaView>
+
+        <Animated.View
+          pointerEvents={overlayActive ? "auto" : "none"}
+          style={[styles.overlayRoot, { opacity: overlayAnim }]}
+        >
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFillObject}
+              activeOpacity={1}
+              onPress={() => setModalVisible(false)}
+            />
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select App</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
+                  <Text style={styles.closeText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              {loading ? (
+                <Text style={styles.emptyText}>Loading apps...</Text>
+              ) : (
+                <FlatList
+                  data={appList}
+                  renderItem={renderItem}
+                  keyExtractor={(item) => item.packageName}
+                  contentContainerStyle={styles.listContent}
+                  ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
+                  indicatorStyle="white"
+                />
+              )}
+            </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View
+          pointerEvents={alertActive ? "auto" : "none"}
+          style={[styles.alertRoot, { opacity: alertAnim }]}
+        >
+          <View style={styles.alertOverlay}>
+            <View style={StyleSheet.absoluteFillObject} />
+            <View style={styles.alertBox}>
+              <Text style={styles.alertTitle}>{alertTitle}</Text>
+              {!!alertMessage && <Text style={styles.alertMessage}>{alertMessage}</Text>}
+              <View style={[styles.alertButtonsRow, alertHasTwo ? styles.alertButtonsTwo : styles.alertButtonsOne]}>
+                {secondaryBtn ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => pressAlertButton(secondaryBtn)}
+                    style={[styles.alertButton, styles.alertButtonSecondary]}
+                  >
+                    <Text style={styles.alertButtonSecondaryText}>{secondaryBtn.text}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => pressAlertButton(primaryBtn)}
+                  style={[
+                    styles.alertButton,
+                    styles.alertButtonPrimary,
+                    alertHasTwo ? styles.alertButtonPrimaryTwo : styles.alertButtonPrimaryOne
+                  ]}
+                >
+                  <Text style={styles.alertButtonPrimaryText}>{primaryBtn.text}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
       </View>
     </SafeAreaProvider>
   );
@@ -683,8 +900,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: 30
   },
+  tapToStartHint: {
+    color: '#979797',
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.1,
+    marginTop: 0,
+    marginBottom: 40,
+    textTransform: 'uppercase'
+  },
   logoContainer: {
-    marginBottom: 25,
+    marginBottom: 15,
     borderRadius: 100,
   },
   logoImage: { width: 160, height: 160 },
@@ -702,7 +928,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.8,
-    marginBottom: 40,
+    marginBottom: 0,
     textTransform: 'uppercase'
   },
 
@@ -775,6 +1001,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#000'
   },
 
+  overlayRoot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 9999
+  },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
   modalContent: {
     width: '85%',
@@ -811,4 +1046,92 @@ const styles = StyleSheet.create({
   appPackage: { fontSize: 11, color: '#555', marginTop: 2 },
   checkIcon: { color: '#1dd4f5', fontWeight: 'bold', fontSize: 16, position: 'absolute', right: 15 },
   emptyText: { color: '#444', textAlign: 'center', marginTop: 50, fontSize: 12 },
+
+    alertRoot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 10000
+  },
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  alertBox: {
+    width: '82%',
+    maxWidth: 340,
+    backgroundColor: '#0f0f0f',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1dd4f5',
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 14
+  },
+  alertTitle: {
+    color: '#eaeaea',
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center'
+  },
+  alertMessage: {
+    color: '#bdbdbd',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+    textAlign: 'center'
+  },
+  alertButtonsRow: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  alertButtonsOne: {
+    justifyContent: 'center'
+  },
+  alertButtonsTwo: {
+    justifyContent: 'space-between'
+  },
+  alertButton: {
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  alertButtonPrimary: {
+    borderColor: '#1dd4f5',
+    backgroundColor: 'rgba(29,212,245,0.10)'
+  },
+  alertButtonSecondary: {
+    borderColor: '#2b2b2b',
+    backgroundColor: 'rgba(255,255,255,0.04)'
+  },
+  alertButtonPrimaryOne: {
+    width: '100%'
+  },
+  alertButtonPrimaryTwo: {
+    flex: 1,
+    marginLeft: 10
+  },
+  alertButtonSecondaryTwo: {
+    flex: 1,
+    marginRight: 10
+  },
+  alertButtonSecondaryText: {
+    color: '#bdbdbd',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3
+  },
+  alertButtonPrimaryText: {
+    color: '#1dd4f5',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4
+  },
 });
