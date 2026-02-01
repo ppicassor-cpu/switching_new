@@ -17,21 +17,21 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import mobileAds, { AdEventType, BannerAd, BannerAdSize, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import * as IAP from 'react-native-iap';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 const { AppSwitchModule } = NativeModules;
-const eventEmitter = DeviceEventEmitter;
 
 const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
 const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
 
-const INTERSTITIAL_REQUEST_OPTIONS = {
+const AD_REQUEST_OPTIONS = {
   requestNonPersonalizedAdsOnly: true,
-  maxAdContentRating: 'PG',
-  tagForChildDirectedTreatment: false,
-  tagForUnderAgeOfConsent: false,
 };
+
+const SESSION_START_AT_KEY = 'SWITCHING_SESSION_START_AT';
+const SESSION_DURATION_MS = 60 * 60 * 1000;
 
 interface AppInfo {
   label: string;
@@ -48,26 +48,11 @@ interface AppState {
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [gma, setGma] = useState<any>(null);
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!isEnabled) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-          Animated.timing(fadeAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      fadeAnim.setValue(0);
-    }
-  }, [isEnabled]);
-
   const interstitialRef = useRef<any>(null);
   const adLoadedRef = useRef<boolean>(false);
   const pendingSaveRef = useRef<boolean>(false);
+  const pendingStartRef = useRef<boolean>(false);
 
   const [appList, setAppList] = useState<AppInfo[]>([]);
   const [targetPackage, setTargetPackage] = useState<string>('');
@@ -79,6 +64,28 @@ export default function App() {
   const [modalVisible, setModalVisible] = useState(false);
 
   const stateRef = useRef<AppState>({ targetPackage, isEnabled, isPremium });
+
+  const progressAnim = useRef(new Animated.Value(1)).current;
+  const sessionStartAtRef = useRef<number | null>(null);
+  const sessionOffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const logo2Opacity = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const logoOpacity = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const gaugeScaleX = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   useEffect(() => {
     stateRef.current = { targetPackage, isEnabled, isPremium };
@@ -92,102 +99,228 @@ export default function App() {
     setTargetIconUri(found.iconUri || '');
   }, [targetPackage, appList]);
 
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      StatusBar.setTranslucent(true);
-      StatusBar.setBackgroundColor("transparent");
-      NavigationBar.setButtonStyleAsync("light");
+  const clearSessionTimers = () => {
+    if (sessionOffTimerRef.current) {
+      clearTimeout(sessionOffTimerRef.current);
+      sessionOffTimerRef.current = null;
+    }
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  };
+
+  const getProgress = (startAt: number) => {
+    const elapsed = Date.now() - startAt;
+    const raw = elapsed / SESSION_DURATION_MS;
+    return Math.max(0, Math.min(1, raw));
+  };
+
+  const expireSession = async (pkgOverride?: string) => {
+    await AsyncStorage.removeItem(SESSION_START_AT_KEY);
+    sessionStartAtRef.current = null;
+    clearSessionTimers();
+    progressAnim.setValue(1);
+
+    setIsEnabled(false);
+    if (AppSwitchModule?.saveSettings) {
+      AppSwitchModule.saveSettings(pkgOverride ?? stateRef.current.targetPackage, false);
+    }
+  };
+
+  const syncSession = async () => {
+    const saved = await AsyncStorage.getItem(SESSION_START_AT_KEY);
+    const startAt = saved ? Number(saved) : null;
+
+    if (!startAt || Number.isNaN(startAt)) {
+      sessionStartAtRef.current = null;
+      clearSessionTimers();
+      progressAnim.setValue(1);
+      return null;
     }
 
-    const checkSubscription = async () => {
-      try {
-        await IAP.initConnection();
-        const purchases = await IAP.getAvailablePurchases();
-        const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
-        setIsPremium(hasSub);
-      } catch (err) {
-        console.warn("구독 확인 실패:", err);
-      }
-    };
-    checkSubscription();
+    const elapsed = Date.now() - startAt;
+    if (elapsed >= SESSION_DURATION_MS) {
+      await expireSession();
+      return null;
+    }
 
-    let mounted = true;
-    let unsubscribeLoaded: any = null;
-    let unsubscribeClosed: any = null;
-    let unsubscribeError: any = null;
+    sessionStartAtRef.current = startAt;
 
-    const t = setTimeout(async () => {
-      try {
-        const mod = require('react-native-google-mobile-ads');
-        await mod.default().initialize();
-        if (!mounted) return;
+    const p = getProgress(startAt);
+    Animated.timing(progressAnim, { toValue: p, duration: 250, useNativeDriver: false }).start();
 
-        setGma(mod);
+    if (sessionOffTimerRef.current) clearTimeout(sessionOffTimerRef.current);
+    const remain = SESSION_DURATION_MS - (Date.now() - startAt);
+    sessionOffTimerRef.current = setTimeout(() => {
+      void expireSession();
+    }, remain);
 
-        const ad = mod.InterstitialAd.createForAdRequest(
-          INTERSTITIAL_ID,
-          INTERSTITIAL_REQUEST_OPTIONS
-        );
-        interstitialRef.current = ad;
+    if (!progressTimerRef.current) {
+      progressTimerRef.current = setInterval(() => {
+        const s = sessionStartAtRef.current;
+        if (!s) return;
+        progressAnim.setValue(getProgress(s));
+      }, 1000);
+    }
 
-        unsubscribeLoaded = ad.addAdEventListener(mod.AdEventType.LOADED, () => {
-          adLoadedRef.current = true;
-          setAdLoaded(true);
+    return startAt;
+  };
 
-          if (pendingSaveRef.current && interstitialRef.current?.show) {
-            interstitialRef.current.show();
-          }
-        });
+  const startNewSessionAndEnable = async (pkgOverride?: string) => {
+    const now = Date.now();
+    await AsyncStorage.setItem(SESSION_START_AT_KEY, String(now));
+    sessionStartAtRef.current = now;
 
-        unsubscribeClosed = ad.addAdEventListener(mod.AdEventType.CLOSED, () => {
-          adLoadedRef.current = false;
-          setAdLoaded(false);
+    progressAnim.setValue(0);
 
-          if (pendingSaveRef.current) {
-            pendingSaveRef.current = false;
-            saveSettings();
-          }
+    setIsEnabled(true);
+    if (AppSwitchModule?.saveSettings) {
+      AppSwitchModule.saveSettings(pkgOverride ?? stateRef.current.targetPackage, true);
+    }
 
-          ad.load();
-        });
+    clearSessionTimers();
+    sessionOffTimerRef.current = setTimeout(() => {
+      void expireSession(pkgOverride ?? stateRef.current.targetPackage);
+    }, SESSION_DURATION_MS);
 
-        unsubscribeError = ad.addAdEventListener(mod.AdEventType.ERROR, (err: any) => {
-          adLoadedRef.current = false;
-          setAdLoaded(false);
-          pendingSaveRef.current = false;
-          console.warn("Interstitial ERROR:", err);
-        });
+    progressTimerRef.current = setInterval(() => {
+      const s = sessionStartAtRef.current;
+      if (!s) return;
+      progressAnim.setValue(getProgress(s));
+    }, 1000);
+  };
 
-        ad.load();
-      } catch (e) {
-        console.warn("GMA init skipped (runtime not ready):", e);
-      }
-    }, 0);
+  const requestStartWithAdGate = async () => {
+    const ad = interstitialRef.current;
 
-    const volumeListener =
-      Platform.OS === 'android'
-        ? DeviceEventEmitter.addListener('onVolumeDownTrigger', handleVolumeDownTrigger)
-        : null;
+    if (!ad?.show || !ad?.load) {
+      Alert.alert("알림", "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
 
-    return () => {
-      mounted = false;
-      clearTimeout(t);
-      try { unsubscribeLoaded && unsubscribeLoaded(); } catch {}
-      try { unsubscribeClosed && unsubscribeClosed(); } catch {}
-      try { unsubscribeError && unsubscribeError(); } catch {}
-      adLoadedRef.current = false;
-      interstitialRef.current = null;
-      volumeListener?.remove();
-      IAP.endConnection();
-    };
-  }, []);
+    pendingSaveRef.current = false;
+    pendingStartRef.current = true;
+
+    if (adLoadedRef.current) {
+      ad.show();
+    } else {
+      ad.load();
+      Alert.alert("알림", "광고 로딩 중입니다. 잠시만 기다려주세요.");
+    }
+  };
 
   useEffect(() => {
+    let mounted = true;
+
+    let unsubLoaded: any = null;
+    let unsubClosed: any = null;
+    let unsubError: any = null;
+
+    async function initializeApp() {
+      try {
+        if (Platform.OS === 'android') {
+          StatusBar.setTranslucent(true);
+          StatusBar.setBackgroundColor("transparent");
+          NavigationBar.setBackgroundColorAsync("#000000");
+          NavigationBar.setButtonStyleAsync("light");
+        }
+
+        try {
+          await IAP.initConnection();
+          const purchases = await IAP.getAvailablePurchases();
+          const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
+          if (mounted) setIsPremium(hasSub);
+        } catch (e) {
+          console.warn("IAP Init Fail:", e);
+        }
+
+        try {
+          await mobileAds().setRequestConfiguration({
+            maxAdContentRating: MaxAdContentRating.PG,
+            tagForChildDirectedTreatment: false,
+            tagForUnderAgeOfConsent: false,
+          });
+
+          await mobileAds().initialize();
+
+          const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, AD_REQUEST_OPTIONS);
+          interstitialRef.current = ad;
+
+          unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
+            adLoadedRef.current = true;
+            if (mounted) setAdLoaded(true);
+
+            if (pendingSaveRef.current && interstitialRef.current?.show) {
+              interstitialRef.current.show();
+            }
+            if (pendingStartRef.current && interstitialRef.current?.show) {
+              interstitialRef.current.show();
+            }
+          });
+
+          unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
+            adLoadedRef.current = false;
+            if (mounted) setAdLoaded(false);
+
+            if (pendingSaveRef.current) {
+              pendingSaveRef.current = false;
+              saveSettings();
+            }
+
+            if (pendingStartRef.current) {
+              pendingStartRef.current = false;
+              void startNewSessionAndEnable();
+            }
+
+            ad.load();
+          });
+
+          unsubError = ad.addAdEventListener(AdEventType.ERROR, (err: any) => {
+            console.warn("Ad Error:", err);
+            adLoadedRef.current = false;
+            if (mounted) setAdLoaded(false);
+            pendingSaveRef.current = false;
+            pendingStartRef.current = false;
+          });
+
+          ad.load();
+        } catch (e) {
+          console.warn("AdMob Init Fail:", e);
+        }
+      } catch (err) {
+        console.error("Critical Init Error:", err);
+      }
+    }
+
+    initializeApp();
+
     if (AppSwitchModule?.getSettings) {
       AppSwitchModule.getSettings().then((res: any) => {
-        if (res) {
-          setTargetPackage(res.targetPackage || '');
-          setIsEnabled(res.isEnabled || false);
+        if (!mounted) return;
+
+        const pkg = res?.targetPackage || '';
+        const enabled = !!res?.isEnabled;
+
+        setTargetPackage(pkg);
+        setIsEnabled(enabled);
+
+        if (enabled) {
+          syncSession().then((startAt) => {
+            if (!mounted) return;
+
+            if (startAt) {
+              setIsEnabled(true);
+              if (AppSwitchModule?.saveSettings) {
+                AppSwitchModule.saveSettings(pkg || stateRef.current.targetPackage, true);
+              }
+              return;
+            }
+
+            void startNewSessionAndEnable(pkg || stateRef.current.targetPackage);
+          }).catch(() => {});
+        } else {
+          void expireSession(pkg || stateRef.current.targetPackage);
         }
       }).catch(console.error);
     }
@@ -195,16 +328,29 @@ export default function App() {
     if (AppSwitchModule?.getInstalledApps) {
       AppSwitchModule.getInstalledApps()
         .then((apps: AppInfo[]) => {
+          if (!mounted) return;
           const sortedApps = apps.sort((a, b) => a.label.localeCompare(b.label));
           setAppList(sortedApps);
           setLoading(false);
         })
-        .catch(() => {
-          setLoading(false);
-        });
+        .catch(() => { if (mounted) setLoading(false); });
     } else {
-      setLoading(false);
+      if (mounted) setLoading(false);
     }
+
+    const volumeListener = Platform.OS === 'android'
+      ? DeviceEventEmitter.addListener('onVolumeDownTrigger', handleVolumeDownTrigger)
+      : null;
+
+    return () => {
+      mounted = false;
+      volumeListener?.remove();
+      clearSessionTimers();
+      try { unsubLoaded && unsubLoaded(); } catch {}
+      try { unsubClosed && unsubClosed(); } catch {}
+      try { unsubError && unsubError(); } catch {}
+      try { IAP.endConnection(); } catch {}
+    };
   }, []);
 
   async function handleVolumeDownTrigger() {
@@ -224,7 +370,7 @@ export default function App() {
     if (lastAdTime && now - parseInt(lastAdTime) < oneHour) {
       launchTargetApp();
     } else {
-      if (adLoaded && interstitialRef.current?.show) {
+      if (adLoadedRef.current && interstitialRef.current?.show) {
         await AsyncStorage.setItem('last_ad_time', now.toString());
         interstitialRef.current.show();
       } else {
@@ -253,19 +399,15 @@ export default function App() {
 
     const ad = interstitialRef.current;
 
-    if (!ad?.show || !ad?.load) {
-      Alert.alert("알림", "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+    if (!adLoadedRef.current) {
+      ad?.load();
+      Alert.alert("알림", "광고를 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
       return;
     }
 
+    pendingStartRef.current = false;
     pendingSaveRef.current = true;
-
-    if (adLoadedRef.current) {
-      ad.show();
-    } else {
-      ad.load();
-      Alert.alert("알림", "광고 로딩 중입니다. 잠시만 기다려주세요.");
-    }
+    ad.show();
   };
 
   const saveSettings = () => {
@@ -276,6 +418,11 @@ export default function App() {
   };
 
   const toggleEnabledByLogo = async () => {
+    if (!targetPackage) {
+      Alert.alert("알림", "앱을 선택해주세요.");
+      return;
+    }
+
     if (!isEnabled) {
       if (AppSwitchModule?.isAccessibilityServiceEnabled) {
         const isGranted = await AppSwitchModule.isAccessibilityServiceEnabled();
@@ -293,13 +440,26 @@ export default function App() {
       }
     }
 
-    setIsEnabled((prev) => {
-      const nextState = !prev;
+    if (isEnabled) {
+      await expireSession(targetPackage);
+      return;
+    }
+
+    const startAt = await syncSession();
+    if (startAt) {
+      setIsEnabled(true);
       if (AppSwitchModule?.saveSettings) {
-        AppSwitchModule.saveSettings(targetPackage, nextState);
+        AppSwitchModule.saveSettings(targetPackage, true);
       }
-      return nextState;
-    });
+      return;
+    }
+
+    if (isPremium) {
+      await startNewSessionAndEnable(targetPackage);
+      return;
+    }
+
+    await requestStartWithAdGate();
   };
 
   const renderItem = ({ item }: { item: AppInfo }) => (
@@ -329,133 +489,173 @@ export default function App() {
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
+    <SafeAreaProvider>
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
 
-      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-        <View style={styles.headerArea}>
-          <View style={[styles.premiumBadge, isPremium ? styles.badgePremium : styles.badgeFree]}>
-            <Text style={styles.premiumText}>
-               {isPremium ? "💎 PREMIUM" : "FREE VERSION"}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.mainContent}>
-
-          <TouchableOpacity 
-              onPress={toggleEnabledByLogo} 
-              activeOpacity={0.9} 
-              style={[styles.logoContainer, isEnabled && styles.logoGlow]}
-          >
-            <Image
-              source={
-                isEnabled
-                  ? require('./assets/app-logo2.png')
-                  : require('./assets/app-logo.png')
-              }
-              style={[styles.logoImage, { opacity: isEnabled ? 1 : 0.4 }]} 
-              resizeMode="contain"
+        <SafeAreaView pointerEvents="none" edges={['top', 'left', 'right']} style={styles.gaugeSafeArea}>
+          <View style={[styles.gaugeOuter, { opacity: isEnabled ? 1 : 0 }]}>
+            <Animated.View
+              style={[
+                styles.gaugeInner,
+                {
+                  transform: [
+                    { translateX: -width / 2 },
+                    { scaleX: gaugeScaleX as any },
+                    { translateX: width / 2 },
+                  ],
+                },
+              ]}
             />
-          </TouchableOpacity>
-          
-          <Text style={[styles.statusLabel, { color: isEnabled ? '#1dd4f5' : '#555' }]}>
-              {isEnabled ? "System Online" : "System Offline"}
-          </Text>
-
-          <View style={styles.cardContainer}>
-              <Text style={styles.cardLabel}>TARGET APP</Text>
-              <TouchableOpacity 
-                  style={styles.appCard} 
-                  onPress={() => setModalVisible(true)}
-                  activeOpacity={0.7}
-              >
-                <View style={[styles.cardIcon, { backgroundColor: targetIconUri ? 'transparent' : (targetLabel ? '#007AFF' : '#222') }]}>
-                      {targetIconUri ? ( 
-                        <Image
-                          source={{ uri: targetIconUri }}
-                          style={{ width: 38, height: 38, borderRadius: 10 }}
-                        />
-                      ) : (
-                        <Text style={styles.cardIconText}>{targetLabel ? targetLabel.charAt(0) : '?'}</Text>
-                      )}
-                  </View>
-                  <View style={styles.cardInfo}>
-                      <Text style={styles.cardTitle} numberOfLines={1}>
-                          {targetLabel || "앱 선택하기"}
-                      </Text>
-                      <Text style={styles.cardSubTitle} numberOfLines={1}>
-                          {targetPackage || "Touch to select target"}
-                      </Text>
-                  </View>
-                  <View style={styles.cardArrow}>
-                      <Text style={styles.arrowText}>›</Text>
-                  </View>
-              </TouchableOpacity>
           </View>
+        </SafeAreaView>
 
-          <View style={styles.footerArea}>
-            <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
-                <Text style={styles.fabIcon}>💾</Text>
-                <Text style={styles.fabText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-
-        <View style={styles.adContainer}>
-          {gma?.BannerAd && gma?.BannerAdSize ? ( 
-            <gma.BannerAd
-              unitId={BANNER_ID}
-              size={gma.BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-              requestOptions={{ 
-                requestNonPersonalizedAdsOnly: true,
-                maxAdContentRating: 'PG',
-                tagForChildDirectedTreatment: false,
-                tagForUnderAgeOfConsent: false,
-              }}
-            />
-          ) : null}
-        </View>
-
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select App</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                  <Text style={styles.closeText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              {loading ? (
-                <Text style={styles.emptyText}>Loading apps...</Text>
-              ) : (
-                <FlatList
-                  data={appList}
-                  renderItem={renderItem}
-                  keyExtractor={(item) => item.packageName}
-                  contentContainerStyle={styles.listContent}
-                  ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
-                  indicatorStyle="white"
-                />
-              )}
+        <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
+          <View style={styles.headerArea}>
+            <View style={[styles.premiumBadge, isPremium ? styles.badgePremium : styles.badgeFree]}>
+              <Text style={styles.premiumText}>
+                {isPremium ? "💎 PREMIUM" : "FREE VERSION"}
+              </Text>
             </View>
           </View>
-        </Modal>
 
-      </SafeAreaView>
-    </View>
+          <View style={styles.mainContent}>
+            <TouchableOpacity
+              onPress={toggleEnabledByLogo}
+              activeOpacity={0.9}
+              style={[styles.logoContainer, isEnabled && styles.logoGlow]}
+            >
+              {isEnabled ? (
+                <View style={styles.logoStack}>
+                  <Animated.Image
+                    source={require('./assets/app-logo2.png')}
+                    style={[styles.logoImage, styles.logoAbsolute, { opacity: logo2Opacity }]}
+                    resizeMode="contain"
+                  />
+                  <Animated.Image
+                    source={require('./assets/app-logo.png')}
+                    style={[styles.logoImage, styles.logoAbsolute, { opacity: logoOpacity }]}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : (
+                <Image
+                  source={require('./assets/app-logo.png')}
+                  style={[styles.logoImage, { opacity: 0.4 }]}
+                  resizeMode="contain"
+                />
+              )}
+            </TouchableOpacity>
+
+            <Text style={[styles.statusLabel, { color: isEnabled ? '#1dd4f5' : '#555' }]}>
+              {isEnabled ? "System Online" : "System Offline"}
+            </Text>
+
+            <View style={styles.cardContainer}>
+              <Text style={styles.cardLabel}>TARGET APP</Text>
+              <TouchableOpacity
+                style={styles.appCard}
+                onPress={() => setModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.cardIcon, { backgroundColor: targetIconUri ? 'transparent' : (targetLabel ? '#007AFF' : '#222') }]}>
+                  {targetIconUri ? (
+                    <Image
+                      source={{ uri: targetIconUri }}
+                      style={{ width: 38, height: 38, borderRadius: 10 }}
+                    />
+                  ) : (
+                    <Text style={styles.cardIconText}>{targetLabel ? targetLabel.charAt(0) : '?'}</Text>
+                  )}
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {targetLabel || "앱 선택하기"}
+                  </Text>
+                  <Text style={styles.cardSubTitle} numberOfLines={1}>
+                    {targetPackage || "Touch to select target"}
+                  </Text>
+                </View>
+                <View style={styles.cardArrow}>
+                  <Text style={styles.arrowText}>›</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footerArea}>
+              <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
+                <Text style={styles.fabIcon}>💾</Text>
+                <Text style={styles.fabText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={modalVisible}
+            onRequestClose={() => setModalVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Select App</Text>
+                  <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
+                    <Text style={styles.closeText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                {loading ? (
+                  <Text style={styles.emptyText}>Loading apps...</Text>
+                ) : (
+                  <FlatList
+                    data={appList}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.packageName}
+                    contentContainerStyle={styles.listContent}
+                    ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
+                    indicatorStyle="white"
+                  />
+                )}
+              </View>
+            </View>
+          </Modal>
+        </SafeAreaView>
+
+        <SafeAreaView style={styles.adSafeArea} edges={['bottom']}>
+          <View style={styles.adContainer}>
+            <BannerAd
+              unitId={BANNER_ID}
+              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              requestOptions={AD_REQUEST_OPTIONS}
+            />
+          </View>
+        </SafeAreaView>
+      </View>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050505' },
   safeArea: { flex: 1 },
+
+  gaugeSafeArea: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 50,
+  },
+  gaugeOuter: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  gaugeInner: {
+    width: '100%',
+    height: 2,
+    backgroundColor: '#1dd4f5',
+  },
 
   headerArea: {
     height: 50,
@@ -481,19 +681,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 80 
+    paddingTop: 30
   },
   logoContainer: {
     marginBottom: 25,
     borderRadius: 100,
   },
   logoImage: { width: 160, height: 160 },
+  logoStack: { width: 160, height: 160, position: 'relative' },
+  logoAbsolute: { position: 'absolute', left: 0, top: 0 },
+
   logoGlow: {
     shadowColor: '#dae1e7',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 40,
-    marginTop: 90,
     elevation: 25,
   },
   statusLabel: {
@@ -547,24 +749,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     paddingVertical: 10,
-    paddingHorizontal: 40,        
-    borderRadius: 4,              
+    paddingHorizontal: 40,
+    borderRadius: 4,
     alignItems: 'center',
-    borderWidth: 0.9,            
-    borderColor: '#49a0c2',          
+    borderWidth: 0.9,
+    borderColor: '#49a0c2',
   },
-  fabIcon: { display: 'none' },   
-  fabText: { 
-    color: '#c8d0d4',             
-    fontSize: 12, 
-    fontWeight: '400',            
-    letterSpacing: 2,             
+  fabIcon: { display: 'none' },
+  fabText: {
+    color: '#c8d0d4',
+    fontSize: 12,
+    fontWeight: '400',
+    letterSpacing: 2,
     textTransform: 'uppercase'
   },
 
+  adSafeArea: {
+    backgroundColor: '#000'
+  },
   adContainer: {
     width: '100%',
-    height: 60, 
+    height: 60,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#000'
@@ -601,9 +806,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#1A1A1A'
   },
-  selectedItem: { backgroundColor: '#111', borderColor: '#007AFF', borderWidth: 1 },
+  selectedItem: { backgroundColor: '#111', borderColor: '#1dd4f5', borderWidth: 1 },
   appLabel: { fontSize: 15, fontWeight: '500', color: '#eee' },
   appPackage: { fontSize: 11, color: '#555', marginTop: 2 },
-  checkIcon: { color: '#007AFF', fontWeight: 'bold', fontSize: 16, position: 'absolute', right: 15 },
+  checkIcon: { color: '#1dd4f5', fontWeight: 'bold', fontSize: 16, position: 'absolute', right: 15 },
   emptyText: { color: '#444', textAlign: 'center', marginTop: 50, fontSize: 12 },
 });

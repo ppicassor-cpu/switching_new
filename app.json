@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
@@ -23,14 +23,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.switching.app",
-      "versionCode": 12,
-      "config": {
-        "googleMobileAdsAppId": "ca-app-pub-5144004139813427~5730965404"
-      },
-      "navigationBar": {
-        "backgroundColor": "#000000",
-        "barStyle": "light-content"
-      }
+      "versionCode": 12
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -44,11 +37,23 @@
           "delayAppMeasurementInit": true
         }
       ],
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.1.20",
+            "newArchEnabled": false
+          },
+          "ios": {
+            "newArchEnabled": false
+          }
+        }
+      ],
       "react-native-iap",
       "./plugins/withAndroidQueries",
       "./plugins/withAppSwitch",
-      "./withAndroidSigning.js"
+      "./withAndroidSigning.js",
+      "./plugins/withKSP.js"
     ],
     "extra": {
       "router": {},
@@ -63,8 +68,11 @@
     "updates": {
       "url": "https://u.expo.dev/9446e8e2-b853-40b2-8597-ec2e2385ce09",
       "enabled": true,
-      "checkOnLaunch": "ALWAYS",
-      "fallbackToCacheTimeout": 0
+      "checkAutomatically": "ON_LOAD"
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#000000",
+      "barStyle": "light-content"
     }
-  }
+  }  
 }
