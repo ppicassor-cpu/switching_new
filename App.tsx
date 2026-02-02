@@ -1,4 +1,6 @@
 ﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as NavigationBar from 'expo-navigation-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -18,11 +20,22 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import 'react-native-gesture-handler';
 import mobileAds, { AdEventType, BannerAd, BannerAdSize, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import * as IAP from 'react-native-iap';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import AdRemovePlanScreen from './src/screens/AdRemovePlanScreen';
+import AppInfoScreen from './src/screens/AppInfoScreen';
+import HelpScreen from './src/screens/HelpScreen';
+import LanguageScreen from './src/screens/LanguageScreen';
+import SubscriptionManageScreen from './src/screens/SubscriptionManageScreen';
+import TermsPrivacyScreen from './src/screens/TermsPrivacyScreen';
+
 const { AppSwitchModule } = NativeModules;
+
+const Stack = createNativeStackNavigator();
+
 
 const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
 const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
@@ -56,6 +69,7 @@ interface CustomAlertButton {
 }
 
 const { width } = Dimensions.get('window');
+const SIDE_MENU_WIDTH = Math.min(width * 0.78, 320);
 
 if (__DEV__) {
   LogBox.ignoreLogs([
@@ -64,7 +78,7 @@ if (__DEV__) {
   ]);
 }
 
-export default function App() {
+function HomeScreen({ navigation }: any) {
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const interstitialRef = useRef<any>(null);
   const adLoadedRef = useRef<boolean>(false);
@@ -103,6 +117,10 @@ export default function App() {
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [overlayActive, setOverlayActive] = useState(false);
 
+  const sideMenuAnim = useRef(new Animated.Value(0)).current;
+  const [sideMenuVisible, setSideMenuVisible] = useState(false);
+  const [sideMenuActive, setSideMenuActive] = useState(false);
+
   const alertAnim = useRef(new Animated.Value(0)).current;
   const [alertActive, setAlertActive] = useState(false);
 
@@ -123,6 +141,12 @@ export default function App() {
     extrapolate: 'clamp',
   });
 
+  const sideMenuTranslateX = sideMenuAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-SIDE_MENU_WIDTH, 0],
+    extrapolate: 'clamp',
+  });
+
   const showAlert = (title: string, message?: string, buttons?: CustomAlertButton[]) => {
     setAlertTitle(title || '');
     setAlertMessage(message || '');
@@ -134,6 +158,9 @@ export default function App() {
   const hideAlert = () => {
     setAlertVisible(false);
   };
+
+  const openSideMenu = () => setSideMenuVisible(true);
+  const closeSideMenu = () => setSideMenuVisible(false);
 
   const pressAlertButton = (btn: CustomAlertButton) => {
     setAlertVisible(false);
@@ -244,8 +271,23 @@ export default function App() {
   }, [alertVisible, alertAnim]);
 
   useEffect(() => {
+    if (sideMenuVisible) {
+      setSideMenuActive(true);
+      Animated.timing(sideMenuAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(sideMenuAnim, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) setSideMenuActive(false);
+      });
+    }
+  }, [sideMenuVisible, sideMenuAnim]);
+
+  useEffect(() => {
     if (Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (sideMenuActive) {
+        setSideMenuVisible(false);
+        return true;
+      }
       if (alertActive) {
         hideAlert();
         return true;
@@ -257,7 +299,7 @@ export default function App() {
       return false;
     });
     return () => sub.remove();
-  }, [alertActive, overlayActive]);
+  }, [sideMenuActive, alertActive, overlayActive]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -665,10 +707,8 @@ export default function App() {
   const secondaryBtn = alertHasTwo ? alertButtons[0] : null;
 
   return (
-    <SafeAreaProvider>
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
-
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
         <SafeAreaView pointerEvents="none" edges={['top', 'left', 'right']} style={styles.gaugeSafeArea}>
           <View style={[styles.gaugeOuter, { opacity: isEnabled ? 1 : 0 }]}>
             <Animated.View
@@ -688,6 +728,9 @@ export default function App() {
 
         <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
           <View style={styles.headerArea}>
+            <TouchableOpacity onPress={openSideMenu} activeOpacity={0.85} style={styles.menuButton}>
+              <Text style={styles.menuButtonText}>☰</Text>
+            </TouchableOpacity>
             <View style={[styles.premiumBadge, isPremium ? styles.badgePremium : styles.badgeFree]}>
               <Text style={styles.premiumText}>
                 {isPremium ? "💎 PREMIUM" : "FREE VERSION"}
@@ -847,7 +890,140 @@ export default function App() {
             </View>
           </View>
         </Animated.View>
+
+        <Animated.View
+          pointerEvents={sideMenuActive ? "auto" : "none"}
+          style={[styles.sideMenuRoot, { opacity: sideMenuAnim }]}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={closeSideMenu}
+          />
+          <Animated.View
+            style={[
+              styles.sideMenuPanel,
+              { transform: [{ translateX: sideMenuTranslateX as any }] },
+            ]}
+          >
+            <View style={styles.sideMenuHeader}>
+              <Text style={styles.sideMenuHeaderTitle}>MENU</Text>
+            </View>
+
+            <View style={styles.membershipBox}>
+              <Text style={styles.membershipTitle}>내 멤버쉽등급</Text>
+              <Text style={styles.membershipValue}>{isPremium ? "프리미엄" : "Free version"}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.sideMenuItem, styles.sideMenuItemFirst]}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeSideMenu();
+                navigation.navigate('AdRemovePlan');
+              }}
+            >
+              <View style={styles.sideMenuItemLeft}>
+                <Text style={styles.sideMenuItemIcon}>💎</Text>
+                <Text style={styles.sideMenuItemText}>광고제거 플랜</Text>
+              </View>
+              <Text style={styles.sideMenuItemChevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sideMenuItem}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeSideMenu();
+                navigation.navigate('Help');
+              }}
+            >
+              <View style={styles.sideMenuItemLeft}>
+                <Text style={styles.sideMenuItemIcon}>?</Text>
+                <Text style={styles.sideMenuItemText}>도움말</Text>
+              </View>
+              <Text style={styles.sideMenuItemChevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sideMenuItem}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeSideMenu();
+                navigation.navigate('Language');
+              }}
+            >
+              <View style={styles.sideMenuItemLeft}>
+                <Text style={styles.sideMenuItemIcon}>A</Text>
+                <Text style={styles.sideMenuItemText}>언어변경</Text>
+              </View>
+              <Text style={styles.sideMenuItemChevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sideMenuItem}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeSideMenu();
+                navigation.navigate('AppInfo');
+              }}
+            >
+              <View style={styles.sideMenuItemLeft}>
+                <Text style={styles.sideMenuItemIcon}>i</Text>
+                <Text style={styles.sideMenuItemText}>앱정보</Text>
+              </View>
+              <Text style={styles.sideMenuItemChevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sideMenuItem}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeSideMenu();
+                navigation.navigate('TermsPrivacy');
+              }}
+            >
+              <View style={styles.sideMenuItemLeft}>
+                <Text style={styles.sideMenuItemIcon}>§</Text>
+                <Text style={styles.sideMenuItemText}>약관 및 개인정보처리지침</Text>
+              </View>
+              <Text style={styles.sideMenuItemChevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sideMenuItem}
+              activeOpacity={0.85}
+              onPress={() => {
+                closeSideMenu();
+                navigation.navigate('SubscriptionManage');
+              }}
+            >
+              <View style={styles.sideMenuItemLeft}>
+                <Text style={styles.sideMenuItemIcon}>S</Text>
+                <Text style={styles.sideMenuItemText}>구독관리</Text>
+              </View>
+              <Text style={styles.sideMenuItemChevron}>›</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
       </View>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="AdRemovePlan" component={AdRemovePlanScreen} />
+          <Stack.Screen name="Help" component={HelpScreen} />
+          <Stack.Screen name="Language" component={LanguageScreen} />
+          <Stack.Screen name="AppInfo" component={AppInfoScreen} />
+          <Stack.Screen name="TermsPrivacy" component={TermsPrivacyScreen} />
+          <Stack.Screen name="SubscriptionManage" component={SubscriptionManageScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
@@ -1134,4 +1310,116 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.4
   },
+
+  menuButton: {
+    position: 'absolute',
+    left: 20,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 44,
+    zIndex: 20
+  },
+  menuButtonText: {
+    color: '#c8d0d4',
+    fontSize: 18,
+    fontWeight: '700'
+  },
+
+  sideMenuRoot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 9500,
+    backgroundColor: 'rgba(0,0,0,0.65)'
+  },
+  sideMenuPanel: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: SIDE_MENU_WIDTH,
+    backgroundColor: '#0b0b0b',
+    borderRightWidth: 1,
+    borderRightColor: '#1f1f1f',
+    paddingTop: Platform.OS === 'android'
+      ? (StatusBar.currentHeight || 20) + 40
+      : 10 + 12,
+  },
+  sideMenuHeader: {
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#171717'
+  },
+  sideMenuHeaderTitle: {
+    color: '#eaeaea',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.2
+  },
+  membershipBox: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    marginBottom: 18,
+    paddingHorizontal: 14,
+    paddingTop: 20,
+    paddingBottom: 20,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: '#1dd4f5',
+    backgroundColor: 'rgba(255,255,255,0.04)'
+  },
+  membershipTitle: {
+    color: '#bdbdbd',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2
+  },
+  membershipValue: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 6,
+    letterSpacing: 0.2
+  },
+  sideMenuItemFirst: {
+    marginTop: 6
+  },
+  sideMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#151515'
+  },
+  sideMenuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  sideMenuItemIcon: {
+    width: 26,
+    textAlign: 'center',
+    marginRight: 10,
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '800'
+  },
+  sideMenuItemText: {
+    color: '#d7d7d7',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2
+  },
+  sideMenuItemChevron: {
+    color: '#444',
+    fontSize: 20,
+    marginTop: 1
+  },
+
 });
