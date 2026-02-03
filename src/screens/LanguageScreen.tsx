@@ -12,18 +12,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LanguageMode } from '../constants/translations';
-import { useLanguage } from '../contexts/LanguageContext'; // ✅ Context 사용
-
-const LANG_KEY = 'SWITCHING_LANGUAGE';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function LanguageScreen({ navigation }: any) {
-  // ✅ Context에서 가져오기
   const { language, changeLanguage, t } = useLanguage();
   
-  // 로컬 상태 (즉시 UI 반응용)
   const [selectedLang, setSelectedLang] = useState<LanguageMode>(language);
 
-  // 🔔 커스텀 알림(Alert) 상태 관리
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
@@ -33,19 +28,62 @@ export default function LanguageScreen({ navigation }: any) {
     setSelectedLang(language);
   }, [language]);
 
-  // 알림 표시 함수
+  // ✅ 번역 처리 함수 (한국어일 때 한글 강제 적용)
+  const tt = (key: string) => {
+    // 1. 로컬 폴백 정의
+    const fallback: Record<LanguageMode, Record<string, string>> = {
+      ko: {
+        language_change: '언어 변경',
+        language_select: '언어 선택',
+        lang_note: '선택한 언어는 앱 전체에 적용됩니다.',
+        apply_complete: '적용 완료',
+        confirm: '확인',
+      },
+      en: {
+        language_change: 'Change Language',
+        language_select: 'Select Language',
+        lang_note: 'The selected language applies to the whole app.',
+        apply_complete: 'Applied',
+        confirm: 'OK',
+      },
+      ja: {
+        language_change: '言語変更',
+        language_select: '言語を選択',
+        lang_note: '選択した言語はアプリ全体に適用されます。',
+        apply_complete: '適用完了',
+        confirm: '確認',
+      },
+      zh: {
+        language_change: '语言设置',
+        language_select: '选择语言',
+        lang_note: '所选语言将应用于整个应用。',
+        apply_complete: '已应用',
+        confirm: '确定',
+      },
+    };
+
+    // ✅ [수정] 한국어 모드라면 글로벌 설정(영어 스타일)을 무시하고 로컬 한글 텍스트 우선 사용
+    if (language === 'ko' && fallback.ko[key]) {
+      return fallback.ko[key];
+    }
+
+    // 그 외 언어는 글로벌 번역 우선
+    const v = t(key as any);
+    if (v !== key) return v;
+
+    return fallback[language]?.[key] ?? key;
+  };
+
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertVisible(true);
   };
 
-  // 알림 닫기 함수
   const hideAlert = () => {
     setAlertVisible(false);
   };
 
-  // 알림 애니메이션 효과
   useEffect(() => {
     Animated.timing(alertAnim, {
       toValue: alertVisible ? 1 : 0,
@@ -54,7 +92,6 @@ export default function LanguageScreen({ navigation }: any) {
     }).start();
   }, [alertVisible]);
 
-  // 뒤로가기 버튼 핸들링
   useEffect(() => {
     const backAction = () => {
       if (alertVisible) {
@@ -71,14 +108,13 @@ export default function LanguageScreen({ navigation }: any) {
     setSelectedLang(next);
     await changeLanguage(next);
     
-    // 메시지 내용도 선택된 언어에 맞춰서 보여줌
     let msg = '';
     if (next === 'ko') msg = '한국어로 설정되었습니다.';
     else if (next === 'en') msg = 'English is selected.';
     else if (next === 'ja') msg = '日本語に設定されました。';
     else if (next === 'zh') msg = '已设置为中文。';
 
-    showAlert(t('apply_complete'), msg);
+    showAlert(tt('apply_complete'), msg);
   };
 
   return (
@@ -89,13 +125,13 @@ export default function LanguageScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85} style={styles.backBtn}>
           <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('language_change')}</Text>
+        <Text style={styles.headerTitle}>{tt('language_change')}</Text>
         <View style={styles.headerRight} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('language_select')}</Text>
+          <Text style={styles.cardTitle}>{tt('language_select')}</Text>
 
           {/* 한국어 */}
           <TouchableOpacity
@@ -103,7 +139,7 @@ export default function LanguageScreen({ navigation }: any) {
             onPress={() => applyLang('ko')}
             style={[styles.optionRow, selectedLang === 'ko' && styles.optionRowOn]}
           >
-            <Text style={styles.optionText}>{t('korean')}</Text>
+            <Text style={styles.optionText}>한국어</Text>
             <Text style={[styles.check, selectedLang === 'ko' ? styles.checkOn : styles.checkOff]}>✓</Text>
           </TouchableOpacity>
 
@@ -113,7 +149,7 @@ export default function LanguageScreen({ navigation }: any) {
             onPress={() => applyLang('en')}
             style={[styles.optionRow, selectedLang === 'en' && styles.optionRowOn]}
           >
-            <Text style={styles.optionText}>{t('english')}</Text>
+            <Text style={styles.optionText}>English</Text>
             <Text style={[styles.check, selectedLang === 'en' ? styles.checkOn : styles.checkOff]}>✓</Text>
           </TouchableOpacity>
 
@@ -123,7 +159,7 @@ export default function LanguageScreen({ navigation }: any) {
             onPress={() => applyLang('ja')}
             style={[styles.optionRow, selectedLang === 'ja' && styles.optionRowOn]}
           >
-            <Text style={styles.optionText}>{t('japanese')}</Text>
+            <Text style={styles.optionText}>日本語</Text>
             <Text style={[styles.check, selectedLang === 'ja' ? styles.checkOn : styles.checkOff]}>✓</Text>
           </TouchableOpacity>
 
@@ -133,17 +169,16 @@ export default function LanguageScreen({ navigation }: any) {
             onPress={() => applyLang('zh')}
             style={[styles.optionRow, selectedLang === 'zh' && styles.optionRowOn]}
           >
-            <Text style={styles.optionText}>{t('chinese')}</Text>
+            <Text style={styles.optionText}>中文</Text>
             <Text style={[styles.check, selectedLang === 'zh' ? styles.checkOn : styles.checkOff]}>✓</Text>
           </TouchableOpacity>
 
           <Text style={styles.note}>
-            {t('lang_note')}
+            {tt('lang_note')}
           </Text>
         </View>
       </ScrollView>
 
-      {/* 커스텀 팝업 */}
       <Animated.View 
         pointerEvents={alertVisible ? "auto" : "none"}
         style={[styles.alertRoot, { opacity: alertAnim }]}
@@ -157,7 +192,7 @@ export default function LanguageScreen({ navigation }: any) {
               onPress={hideAlert}
               style={styles.alertButton}
             >
-              <Text style={styles.alertButtonText}>{t('confirm')}</Text>
+              <Text style={styles.alertButtonText}>{tt('confirm')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -225,7 +260,6 @@ const styles = StyleSheet.create({
 
   note: { color: MUTED, fontSize: 11, lineHeight: 16, marginTop: 12, textAlign: 'center' },
 
-  // --- 커스텀 팝업 스타일 ---
   alertRoot: {
     position: 'absolute',
     left: 0,

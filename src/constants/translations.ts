@@ -1,98 +1,178 @@
 // FILE: src/constants/translations.ts
 
-// 1. 사용할 언어 타입 정의 (4개 국어)
 export type LanguageMode = 'ko' | 'en' | 'ja' | 'zh';
 
-// 2. 번역 데이터
 export const STRINGS = {
   ko: {
-    // 공통
+    // --- 공통 (Common) ---
     alert: '알림',
     confirm: '확인',
     cancel: '취소',
     error: '오류',
-    save: '저장',
-    loading: '로딩 중...',
-    processing: '처리 중...',
-    check: '확인 중…',
+    save: 'Save', // ✅ 영어 유지
+    loading: 'Loading...',
+    processing: 'Processing...',
+    check: 'Check',
     later: '나중에',
     settings_move: '설정 이동',
-    
-    // 메뉴/헤더
-    menu: '메뉴',
-    home: '홈',
+
+    // --- 메뉴/헤더 (Menu/Header) ---
+    menu: 'MENU',
+    home: 'HOME',
     ad_remove_plan: '광고제거 플랜',
     help: '도움말',
     language_change: '언어변경',
     app_info: '앱정보',
     terms_privacy: '약관 및 개인정보처리지침',
     subscription_manage: '구독관리',
-    
-    // 홈 화면
+
+    // --- 홈 화면 (Home Screen) ---
     system_online: 'System Online',
     system_offline: 'System Offline',
     tap_to_start: '▲ TAP TO START ▲',
     target_app: 'TARGET APP',
-    select_app: '앱 선택하기',
+    select_app: 'Select App', // ✅ 영어 유지
     touch_to_select: 'Touch to select target',
     premium_badge: '💎 PREMIUM',
     free_badge: 'FREE VERSION',
-    save_success: '저장 성공',
+    save_success: 'Save Complete',
     save_success_msg: '설정이 시스템에 반영되었습니다.',
-    
-    // 광고제거 플랜
-    premium_title: '프리미엄',
+
+    // --- 광고제거 플랜 (AdRemovePlanScreen) ---
+    premium_title: 'Premium',
     premium_sub: '광고 없는 쾌적한 앱 사용',
-    quick_buy: '바로 신청',
-    status_premium: '현재: 프리미엄 적용 중',
-    status_free: '현재: 무료 버전 사용 중',
-    premium_benefits: '프리미엄 혜택',
+    quick_buy: 'Buy Now',
+    status_premium: '현재: Premium 적용 중',
+    status_free: '현재: Free 버전 사용 중',
+    premium_benefits: 'Premium Benefits',
     benefit_1: '모든 배너 및 전면 광고 완벽 제거',
     benefit_2: '앱 시작 및 저장 시 대기 시간 없이 즉시 실행',
     benefit_3: '세션 제한 없는 무제한 앱 스위칭 지원',
     benefit_4: '향후 업데이트되는 프리미엄 전용 기능 이용 가능',
     benefit_5: '빠르고 정확한 프리미엄 전용 고객 지원',
-    subscription_manage_section: '구독 / 관리',
-    already_premium: '이미 프리미엄 혜택을 이용 중입니다',
+    subscription_manage_section: 'Subscription / Manage',
+    already_premium: '이미 Premium 혜택을 이용 중입니다',
     subscribe_monthly: '/ 월간 구독하기',
-    restore_purchase: '구매 내역 복원',
+    restore_purchase: 'Restore Purchase',
     open_store: '스토어에서 구독 관리 열기 ↗',
     subscription_note: '구독 해지는 구글 플레이 스토어 설정에서 언제든 가능합니다.',
-    purchase_success: '감사합니다!',
-    purchase_success_msg: '프리미엄 구독이 시작되었습니다.',
-    restore_complete: '복원 완료',
-    restore_complete_msg: '프리미엄 혜택이 복원되었습니다.',
+    purchase_success: 'Thank You!',
+    purchase_success_msg: 'Premium 구독이 시작되었습니다.',
+    restore_complete: 'Restore Complete',
+    restore_complete_msg: 'Premium 혜택이 복원되었습니다.',
     restore_fail_msg: '복원할 구독 내역이 없습니다.',
-    
-    // 구독 관리
-    current_status: '현재 상태',
-    membership: '멤버십',
-    premium_label: '프리미엄',
+
+    // --- 구독 관리 (SubscriptionManageScreen) ---
+    current_status: '현재 상태', // ✅ 한글로 수정
+    membership: '멤버쉽',       // ✅ 한글로 수정
+    premium_label: 'Premium',
     free_label: 'FREE',
     sub_manage_desc: '구독 변경/해지는 스토어 설정에서 진행됩니다. 앱 내에서는 상태 확인 및 링크 이동을 제공합니다.',
-    manage_section: '관리',
+    manage_section: '관리',     // ✅ 한글로 수정
     check_history_again: '구매 내역 다시 확인',
     go_to_ad_remove: '광고제거 플랜 화면으로 이동 ›',
-    check_complete: '확인 완료',
-    check_premium_msg: '현재 프리미엄이 적용되어 있습니다.',
-    check_free_msg: '현재 무료 버전입니다.',
-    
-    // 언어 변경
-    language_select: '언어 선택',
+    check_complete: 'Check Complete',
+    check_premium_msg: '현재 Premium이 적용되어 있습니다.',
+    check_free_msg: '현재 Free 버전입니다.',
+    check_fail_msg: '확인에 실패했습니다.',
+    open_store_error: '스토어를 열 수 없습니다.',
+
+    // --- 언어 변경 (LanguageScreen) ---
+    language_select: 'Select Language',
     korean: '한국어',
     english: 'English',
     japanese: '日本語',
     chinese: '中文',
     lang_note: '현재 앱은 일부 문구가 시스템 언어/플랫폼에 따라 표시될 수 있습니다.',
-    apply_complete: '적용 완료',
+    apply_complete: 'Apply Complete',
     apply_complete_msg: '한국어로 설정되었습니다.',
-    
-    // 배터리 최적화
+
+    // --- 배터리 최적화 (Battery Optimization) ---
     battery_title: '배터리 최적화 해제 권장',
     battery_msg: "백그라운드에서 앱이 꺼지지 않으려면 배터리 설정을 '제한 없음'으로 변경해야 합니다.\n\n변경하지 않아도 실행은 되지만, 도중에 멈출 수 있습니다.",
-    dont_show_again: '다시 보지 않기',
+    dont_show_again: 'Don\'t show again',
+
+    // --- 접근성 권한 (Accessibility) ---
+    accessibility_title: '접근성 권한 필요',
+    accessibility_msg: "볼륨 키를 감지하려면 접근성 권한이 필요합니다.\n\n[설정 이동] 후 '설치된 앱' 목록에서 [스위칭 서비스]를 '사용'으로 바꿔주세요.",
+
+    // --- 앱 정보 (AppInfoScreen) ---
+    basic_info: '기본 정보',
+    version: '버전',
+    build_number: '빌드 번호',
+    sdk_version: 'SDK 버전',
+    android_package: 'Android 패키지',
+    expo_config_note: '표시 정보는 Expo 설정(expoConfig) 기준입니다.',
+    dev_info: '개발자 정보',
+    developer: '개발자',
+    contact: '연락처',
+    website: '웹사이트',
+    contact_note: '앱 관련 문의나 피드백은 이메일로 보내주세요.',
+    app_desc_title: '앱 설명',
+    app_desc_1: 'Switching 앱은 볼륨 다운 버튼으로 빠르게 앱을 전환할 수 있는 혁신적인 도구입니다.',
+    app_desc_2: '주요 기능: 볼륨 다운 버튼으로 타겟 앱 즉시 실행, 광고 제거, 세션 타이머 등.',
+    app_desc_note: '앱을 더 잘 활용하기 위해 도움말을 확인하세요.',
+    shortcuts: 'Shortcuts',
+    view_terms: '약관 및 개인정보처리지침 보기 ›',
+    open_help: '도움말 열기 ›',
+    manage_sub_link: '구독 관리 ›',
+
+    // --- 도움말 (HelpScreen) ---
+    faq_title: 'FAQ',
+    support_title: 'Support',
+    email_inquiry: '이메일 문의 ↗',
+    faq_1_q: '볼륨다운이 동작하지 않아요',
+    faq_1_a: '안드로이드 설정에서 “접근성 권한”이 필요합니다.\n설정 > 접근성 > 설치된 앱에서 스위칭 서비스를 “사용”으로 변경해주세요.',
+    faq_2_q: 'System Online/Offline은 무엇인가요?',
+    faq_2_a: 'Online은 “감지/실행 기능이 활성화된 상태”를 의미합니다.\nOffline은 기능이 꺼진 상태입니다.',
+    faq_3_q: '배터리 최적화 안내가 뜨는 이유',
+    faq_3_a: '백그라운드에서 안정적으로 동작하려면 배터리 최적화(절전) 제한을 해제하는 것이 도움이 됩니다.',
+    faq_4_q: '프리미엄은 무엇이 달라지나요?',
+    faq_4_a: '프리미엄은 광고(배너/전면) 노출이 제거되고, 더 쾌적한 사용이 가능합니다.',
+    faq_5_q: '문의는 어디로 하나요?',
+    faq_5_a: '아래 “이메일 문의” 버튼을 이용해주세요.',
+
+    // --- 약관 (TermsPrivacyScreen) ---
+    terms_summary: '요약',
+    // [NEW] 약관 본문 추가
+    terms_summary_p1: '- 본 문서는 손씨네 Inc.가 제공하는 Switching 앱의 이용 약관과 개인정보 처리방침을 설명합니다. 앱을 사용함으로써 본 약관에 동의하는 것으로 간주됩니다.',
+    terms_summary_p2: '- 당사는 사용자의 개인정보를 최소한으로 수집하며, 보호를 위해 최선의 노력을 다합니다. 자세한 내용은 아래를 참조하세요.',
+    terms_summary_p3: '- 본 약관은 법적 변화나 서비스 업데이트에 따라 변경될 수 있으며, 변경 시 앱 내 공지나 이메일을 통해 알려드립니다.',
+    
+    terms_section_1: '1. 서비스 제공',
+    terms_sec1_p1: '손씨네 Inc.는 Switching 앱을 통해 사용자가 볼륨 다운 버튼으로 선택한 타겟 앱을 빠르게 실행할 수 있는 기능을 제공합니다. 이 기능은 접근성 서비스를 활용하며, 무료 버전(광고 포함)과 프리미엄 플랜(광고 제거, 무제한 세션)을 지원합니다.',
+    terms_sec1_p2: '서비스의 주요 구성 요소:\n- 타겟 앱 선택 및 저장\n- 시스템 온라인/오프라인 상태 관리\n- 세션 기반 타이머와 프로그레스 표시\n- 구독 관리 및 광고 표시',
+    terms_sec1_p3: '앱은 Android 기기에서 최적화되어 있으며, 배터리 최적화 해제와 접근성 권한이 필요합니다. 서비스 이용 시 발생하는 데이터 비용은 사용자 부담입니다.',
+
+    terms_section_2: '2. 수집 및 처리되는 개인정보',
+    terms_sec2_p1: '- 앱 내 설정값: 타겟 앱의 패키지명, 기능 활성화 여부(isEnabled), 세션 시작 시각. 이는 기기 내 SharedPreferences 또는 AsyncStorage에 저장되어 앱 기능 제공에 사용됩니다.',
+    terms_sec2_p2: '- 구독 및 구매 정보: Google Play 스토어를 통해 구독 상태를 확인하며, 구매 영수증 ID와 제품 ID를 처리합니다. 이는 프리미엄 기능 활성화에 필요합니다.',
+    terms_sec2_p3: '- 광고 관련 정보: Google Mobile Ads SDK를 통해 광고 ID, 기기 정보(모델, OS 버전), IP 주소 등을 수집할 수 있습니다. 이는 광고 타겟팅 및 표시를 위해 사용되며, SDK의 개인정보 처리방침을 따릅니다.',
+    terms_sec2_p4: '- 로그 데이터: 앱 충돌이나 오류 발생 시 익명화된 로그를 수집하여 서비스 개선에 활용할 수 있습니다. (선택적이며, 사용자 동의 하에 진행)',
+    terms_sec2_p5: '당사는 법적 요구가 없는 한 사용자의 개인정보를 제3자와 공유하지 않습니다. 다만, 광고 SDK나 결제 처리 시 필요한 범위 내에서 공유될 수 있습니다.',
+
+    terms_section_3: '3. 개인정보 보관 및 보호',
+    terms_sec3_p1: '- 보관 기간: 설정값은 앱 삭제 시까지 기기 내에 저장됩니다. 구독 정보는 구독 기간 동안 유지되며, 해지 후 즉시 삭제됩니다. 로그 데이터는 최대 90일 보관 후 삭제합니다.',
+    terms_sec3_p2: '- 보호 조치: 데이터는 암호화되어 저장되며, 접근 제어를 통해 무단 액세스를 방지합니다. 서버 측 데이터(없을 경우 생략)는 SSL/TLS 프로토콜을 사용합니다.',
+    terms_sec3_p3: '- 파기 방법: 보관 기간 종료 시 자동 삭제되며, 복구 불가능한 방법(예: overwrite)으로 처리합니다.',
+    terms_sec3_p4: '당사는 개인정보 보호법을 준수하며, 보안 사고 발생 시 즉시 사용자에게 통보하고 대응합니다.',
+
+    terms_section_4: '4. 이용자 권리 및 행사 방법',
+    terms_sec4_p1: '- 열람/정정/삭제 권리: 사용자는 언제든지 자신의 개인정보를 열람, 정정, 삭제할 수 있습니다. 앱 내 설정에서 직접 관리하거나, 문의 메일을 통해 요청하세요.',
+    terms_sec4_p2: '- 동의 철회: 개인정보 수집 동의를 철회할 수 있으며, 철회 시 일부 기능이 제한될 수 있습니다.',
+    terms_sec4_p3: '- 앱 삭제: 앱을 삭제하면 기기 내 모든 설정값이 제거됩니다.',
+    terms_sec4_p4: '- 구독 해지: Google Play 스토어에서 구독을 관리하세요. 해지 시 프리미엄 혜택이 즉시 종료됩니다.',
+    terms_sec4_p5: '권리 행사 시 본인 확인 절차를 거칩니다. 처리 결과는 10일 이내에 통보드립니다.',
+
+    terms_section_5: '5. 개인정보 보호책임자',
+    terms_section_6: '6. 기타',
+    terms_sec6_p1: '- 본 약관은 한국법에 따라 해석되며, 분쟁 시 부산지방법원을 관할법원으로 합니다.',
+    terms_sec6_p2: '- 서비스 이용 중 발생하는 분쟁은 상호 협의를 통해 해결하며, 합의되지 않을 경우 법적 절차를 따릅니다.',
+
+    terms_section_7: '7. 문의',
+    terms_note: '문의 시 앱 버전과 기기 정보를 포함해 주시면 더 빠른 도움을 드릴 수 있습니다.',
   },
-  
+
   en: {
     alert: 'Alert',
     confirm: 'Confirm',
@@ -101,10 +181,10 @@ export const STRINGS = {
     save: 'Save',
     loading: 'Loading...',
     processing: 'Processing...',
-    check: 'Checking...',
+    check: 'Check',
     later: 'Later',
     settings_move: 'Go to Settings',
-    
+
     menu: 'Menu',
     home: 'Home',
     ad_remove_plan: 'Ad-Free Plan',
@@ -113,7 +193,7 @@ export const STRINGS = {
     app_info: 'App Info',
     terms_privacy: 'Terms & Privacy',
     subscription_manage: 'Manage Sub.',
-    
+
     system_online: 'System Online',
     system_offline: 'System Offline',
     tap_to_start: '▲ TAP TO START ▲',
@@ -124,7 +204,7 @@ export const STRINGS = {
     free_badge: 'FREE VERSION',
     save_success: 'Saved',
     save_success_msg: 'Settings have been applied.',
-    
+
     premium_title: 'Premium',
     premium_sub: 'Ad-free, faster experience',
     quick_buy: 'Buy Now',
@@ -147,7 +227,7 @@ export const STRINGS = {
     restore_complete: 'Restore Complete',
     restore_complete_msg: 'Premium benefits restored.',
     restore_fail_msg: 'No subscription history found.',
-    
+
     current_status: 'Current Status',
     membership: 'Membership',
     premium_label: 'Premium',
@@ -159,7 +239,9 @@ export const STRINGS = {
     check_complete: 'Check Complete',
     check_premium_msg: 'Premium is currently active.',
     check_free_msg: 'You are currently on Free plan.',
-    
+    check_fail_msg: 'Check failed.',
+    open_store_error: 'Cannot open the store.',
+
     language_select: 'Select Language',
     korean: '한국어',
     english: 'English',
@@ -168,10 +250,86 @@ export const STRINGS = {
     lang_note: 'Some system messages may depend on device settings.',
     apply_complete: 'Applied',
     apply_complete_msg: 'English is selected.',
-    
+
     battery_title: 'Ignore Battery Optimization',
     battery_msg: "To prevent the app from stopping in the background, please set battery usage to 'Unrestricted'.\n\nIt may still run without this, but could be unstable.",
     dont_show_again: 'Don\'t show again',
+
+    accessibility_title: 'Accessibility Permission Needed',
+    accessibility_msg: "Accessibility permission is required to detect volume keys.\n\nPlease go to [Settings], find [Switching Service] in 'Installed Apps', and turn it 'On'.",
+
+    basic_info: 'Basic Info',
+    version: 'Version',
+    build_number: 'Build Number',
+    sdk_version: 'SDK Version',
+    android_package: 'Android Package',
+    expo_config_note: 'Information based on Expo config.',
+    dev_info: 'Developer Info',
+    developer: 'Developer',
+    contact: 'Contact',
+    website: 'Website',
+    contact_note: 'Please send inquiries or feedback via email.',
+    app_desc_title: 'App Description',
+    app_desc_1: 'Switching app is an innovative tool to quickly switch apps using the volume down button.',
+    app_desc_2: 'Key Features: Instant app launch via volume key, ad-free experience, session timer, etc.',
+    app_desc_note: 'Check Help for more details.',
+    shortcuts: 'Shortcuts',
+    view_terms: 'View Terms & Privacy ›',
+    open_help: 'Open Help ›',
+    manage_sub_link: 'Manage Subscription ›',
+
+    faq_title: 'FAQ',
+    support_title: 'Support',
+    email_inquiry: 'Email Inquiry ↗',
+    faq_1_q: 'Volume down is not working',
+    faq_1_a: 'Accessibility permission is required in Android settings.\nGo to Settings > Accessibility > Installed Apps > Switching Service and turn it On.',
+    faq_2_q: 'What is System Online/Offline?',
+    faq_2_a: 'Online means detection is active.\nOffline means the feature is turned off.',
+    faq_3_q: 'Why see Battery Optimization?',
+    faq_3_a: 'To run stably in the background, removing battery restrictions helps.',
+    faq_4_q: 'What does Premium offer?',
+    faq_4_a: 'Premium removes ads (banner/interstitial) and provides a smoother experience.',
+    faq_5_q: 'Where to inquire?',
+    faq_5_a: 'Please use the "Email Inquiry" button below.',
+
+    terms_summary: 'Summary',
+    // [NEW] Terms Body (English)
+    terms_summary_p1: '- This document explains the Terms of Service and Privacy Policy of the Switching app provided by Soncine Inc. By using the app, you agree to these terms.',
+    terms_summary_p2: '- We collect minimal personal information and strive to protect it. See below for details.',
+    terms_summary_p3: '- These terms may change due to legal changes or service updates. We will notify you via app notice or email.',
+    
+    terms_section_1: '1. Service Provision',
+    terms_sec1_p1: 'Soncine Inc. provides the Switching app feature that allows users to quickly launch a target app using the volume down button. This feature uses accessibility services and supports a free version (with ads) and a premium plan (ad-free, unlimited sessions).',
+    terms_sec1_p2: 'Key Service Components:\n- Target app selection and storage\n- System online/offline status management\n- Session-based timer and progress display\n- Subscription management and ad display',
+    terms_sec1_p3: 'The app is optimized for Android devices and requires battery optimization exemption and accessibility permissions. Data charges incurred while using the service are the responsibility of the user.',
+
+    terms_section_2: '2. Collected Information',
+    terms_sec2_p1: '- In-app settings: Target app package name, enabled status (isEnabled), session start time. These are stored in SharedPreferences or AsyncStorage on the device to provide app functions.',
+    terms_sec2_p2: '- Subscription and Purchase Info: Checks subscription status via Google Play Store and processes purchase receipt IDs and product IDs. Required for premium feature activation.',
+    terms_sec2_p3: '- Ad-related Info: May collect ad IDs, device info (model, OS version), IP address, etc., via Google Mobile Ads SDK for ad targeting and display, following the SDK privacy policy.',
+    terms_sec2_p4: '- Log Data: Anonymized logs may be collected in case of app crashes or errors to improve the service. (Optional, with user consent)',
+    terms_sec2_p5: 'We do not share your personal information with third parties unless required by law. However, it may be shared within the scope necessary for ad SDKs or payment processing.',
+
+    terms_section_3: '3. Data Retention & Protection',
+    terms_sec3_p1: '- Retention Period: Settings are stored on the device until the app is deleted. Subscription info is retained during the subscription period and deleted immediately upon cancellation. Log data is deleted after a maximum of 90 days.',
+    terms_sec3_p2: '- Protection Measures: Data is encrypted and stored, with access controls to prevent unauthorized access. Server-side data (if any) uses SSL/TLS protocols.',
+    terms_sec3_p3: '- Destruction Method: Automatically deleted at the end of the retention period using irreversible methods (e.g., overwrite).',
+    terms_sec3_p4: 'We comply with privacy laws and will notify users immediately in case of security incidents.',
+
+    terms_section_4: '4. User Rights',
+    terms_sec4_p1: '- Right to Access/Correct/Delete: Users can access, correct, or delete their personal information at any time. Manage directly in app settings or request via email.',
+    terms_sec4_p2: '- Withdrawal of Consent: You can withdraw consent for personal information collection, which may limit some features.',
+    terms_sec4_p3: '- App Deletion: Deleting the app removes all settings stored on the device.',
+    terms_sec4_p4: '- Subscription Cancellation: Manage your subscription in the Google Play Store. Premium benefits end immediately upon cancellation.',
+    terms_sec4_p5: 'Identity verification is required when exercising rights. Results will be notified within 10 days.',
+
+    terms_section_5: '5. Privacy Officer',
+    terms_section_6: '6. Others',
+    terms_sec6_p1: '- These terms are interpreted under Korean law, and the Busan District Court shall be the competent court for disputes.',
+    terms_sec6_p2: '- Disputes arising during service use shall be resolved through mutual consultation; if no agreement is reached, legal procedures will be followed.',
+
+    terms_section_7: '7. Contact',
+    terms_note: 'Including your app version and device information in your inquiry will help us assist you faster.',
   },
 
   ja: {
@@ -185,7 +343,7 @@ export const STRINGS = {
     check: '確認中...',
     later: '後で',
     settings_move: '設定へ',
-    
+
     menu: 'メニュー',
     home: 'ホーム',
     ad_remove_plan: '広告削除プラン',
@@ -194,7 +352,7 @@ export const STRINGS = {
     app_info: 'アプリ情報',
     terms_privacy: '規約・プライバシー',
     subscription_manage: '定期購入管理',
-    
+
     system_online: 'System Online',
     system_offline: 'System Offline',
     tap_to_start: '▲ TAP TO START ▲',
@@ -205,7 +363,7 @@ export const STRINGS = {
     free_badge: 'FREE VERSION',
     save_success: '保存完了',
     save_success_msg: '設定がシステムに適用されました。',
-    
+
     premium_title: 'プレミアム',
     premium_sub: '広告なしで快適に利用',
     quick_buy: '申し込む',
@@ -228,7 +386,7 @@ export const STRINGS = {
     restore_complete: '復元完了',
     restore_complete_msg: 'プレミアム特典が復元されました。',
     restore_fail_msg: '復元できる購入履歴がありません。',
-    
+
     current_status: '現在の状態',
     membership: 'メンバーシップ',
     premium_label: 'プレミアム',
@@ -240,7 +398,9 @@ export const STRINGS = {
     check_complete: '確認完了',
     check_premium_msg: '現在プレミアムが適用されています。',
     check_free_msg: '現在無料バージョンです。',
-    
+    check_fail_msg: '確認に失敗しました。',
+    open_store_error: 'ストアを開けません。',
+
     language_select: '言語選択',
     korean: '한국어',
     english: 'English',
@@ -249,10 +409,86 @@ export const STRINGS = {
     lang_note: '一部のメッセージは端末の設定に依存する場合があります。',
     apply_complete: '適用完了',
     apply_complete_msg: '日本語に設定されました。',
-    
+
     battery_title: 'バッテリー最適化の除外',
     battery_msg: "バックグラウンドでの停止を防ぐため、バッテリー使用量を「制限なし」に設定してください。\n\n設定しなくても実行可能ですが、不安定になる可能性があります。",
     dont_show_again: '今後表示しない',
+
+    accessibility_title: 'ユーザー補助権限が必要です',
+    accessibility_msg: "音量キーを検知するにはユーザー補助権限が必要です。\n\n[設定へ]移動後、「インストール済みアプリ」リストから[Switching Service]を「ON」にしてください。",
+
+    basic_info: '基本情報',
+    version: 'バージョン',
+    build_number: 'ビルド番号',
+    sdk_version: 'SDKバージョン',
+    android_package: 'Androidパッケージ',
+    expo_config_note: '表示情報はExpo設定(expoConfig)に基づきます。',
+    dev_info: '開発者情報',
+    developer: '開発者',
+    contact: '連絡先',
+    website: 'ウェブサイト',
+    contact_note: 'お問い合わせやフィードバックはメールでお送りください。',
+    app_desc_title: 'アプリ説明',
+    app_desc_1: 'Switchingアプリは、音量ダウンボタンですばやくアプリを切り替える革新的なツールです。',
+    app_desc_2: '主な機能：音量キーでの即時起動、広告なし、セッションタイマーなど。',
+    app_desc_note: '詳細はヘルプをご確認ください。',
+    shortcuts: 'ショートカット',
+    view_terms: '規約・プライバシーを見る ›',
+    open_help: 'ヘルプを開く ›',
+    manage_sub_link: '定期購入を管理 ›',
+
+    faq_title: 'よくある質問',
+    support_title: 'サポート',
+    email_inquiry: 'メールでお問い合わせ ↗',
+    faq_1_q: '音量ダウンが動作しません',
+    faq_1_a: 'Android設定で「ユーザー補助権限」が必要です。\n設定 > ユーザー補助 > インストール済みアプリからSwitching Serviceを「ON」にしてください。',
+    faq_2_q: 'System Online/Offlineとは？',
+    faq_2_a: 'Onlineは「検知機能が有効な状態」です。\nOfflineは機能がオフの状態です。',
+    faq_3_q: 'バッテリー最適化の案内が出る理由',
+    faq_3_a: 'バックグラウンドで安定して動作させるため、バッテリー制限を解除することを推奨しています。',
+    faq_4_q: 'プレミアムは何が違いますか？',
+    faq_4_a: 'プレミアムは広告（バナー/全画面）が削除され、より快適に利用できます。',
+    faq_5_q: '問い合わせ先は？',
+    faq_5_a: '下の「メールでお問い合わせ」ボタンをご利用ください。',
+
+    terms_summary: '概要',
+    // [NEW] Terms Body (Japanese)
+    terms_summary_p1: '- 本文書はソンシネInc.が提供するSwitchingアプリの利用規約および個人情報処理方針を説明します。アプリを使用することで、本規約に同意したものとみなされます。',
+    terms_summary_p2: '- 当社はユーザーの個人情報を最小限に収集し、保護のために最善の努力を尽くします。詳細は以下をご参照ください。',
+    terms_summary_p3: '- 本規約は法的変更やサービス更新により変更される場合があり、変更時にはアプリ内のお知らせやメールで通知します。',
+    
+    terms_section_1: '1. サービス提供',
+    terms_sec1_p1: 'ソンシネInc.は、Switchingアプリを通じてユーザーが音量ダウンボタンで選択したターゲットアプリを素早く実行できる機能を提供します。この機能はアクセシビリティサービスを利用し、無料版（広告あり）とプレミアムプラン（広告なし、無制限セッション）をサポートします。',
+    terms_sec1_p2: 'サービスの主な構成要素：\n- ターゲットアプリの選択および保存\n- システムオンライン/オフライン状態管理\n- セッションベースのタイマーと進行状況表示\n- サブスクリプション管理および広告表示',
+    terms_sec1_p3: 'アプリはAndroidデバイスに最適化されており、バッテリー最適化の解除とアクセシビリティ権限が必要です。サービス利用時に発生するデータ通信料はユーザー負担となります。',
+
+    terms_section_2: '2. 収集および処理される個人情報',
+    terms_sec2_p1: '- アプリ内設定値：ターゲットアプリのパッケージ名、機能有効化状態(isEnabled)、セッション開始時刻。これらはデバイス内のSharedPreferencesまたはAsyncStorageに保存され、アプリ機能の提供に使用されます。',
+    terms_sec2_p2: '- サブスクリプションおよび購入情報：Google Playストアを通じてサブスクリプション状態を確認し、購入レシートIDと製品IDを処理します。これはプレミアム機能の有効化に必要です。',
+    terms_sec2_p3: '- 広告関連情報：Google Mobile Ads SDKを通じて広告ID、デバイス情報（モデル、OSバージョン）、IPアドレスなどを収集する場合があります。これは広告ターゲティングおよび表示に使用され、SDKの個人情報処理方針に従います。',
+    terms_sec2_p4: '- ログデータ：アプリのクラッシュやエラー発生時に匿名化されたログを収集し、サービス改善に活用する場合があります。（任意、ユーザー同意の下で進行）',
+    terms_sec2_p5: '当社は法的要求がない限り、ユーザーの個人情報を第三者と共有しません。ただし、広告SDKや決済処理に必要な範囲内で共有される場合があります。',
+
+    terms_section_3: '3. 個人情報の保管および保護',
+    terms_sec3_p1: '- 保管期間：設定値はアプリ削除時までデバイス内に保存されます。サブスクリプション情報は期間中保持され、解約後直ちに削除されます。ログデータは最大90日間保管後に削除されます。',
+    terms_sec3_p2: '- 保護措置：データは暗号化されて保存され、アクセス制御により不正アクセスを防止します。サーバー側データ（ある場合）はSSL/TLSプロトコルを使用します。',
+    terms_sec3_p3: '- 破棄方法：保管期間終了時に自動削除され、復元不可能な方法（例：上書き）で処理されます。',
+    terms_sec3_p4: '当社は個人情報保護法を遵守し、セキュリティ事故発生時には直ちにユーザーに通知し対応します。',
+
+    terms_section_4: '4. 利用者の権利および行使方法',
+    terms_sec4_p1: '- 閲覧/訂正/削除の権利：ユーザーはいつでも自身の個人情報を閲覧、訂正、削除できます。アプリ内設定で直接管理するか、お問い合わせメールでリクエストしてください。',
+    terms_sec4_p2: '- 同意の撤回：個人情報収集の同意を撤回できますが、撤回時には一部機能が制限される場合があります。',
+    terms_sec4_p3: '- アプリ削除：アプリを削除すると、デバイス内のすべての設定値が削除されます。',
+    terms_sec4_p4: '- サブスクリプション解約：Google Playストアでサブスクリプションを管理してください。解約時、プレミアム特典は直ちに終了します。',
+    terms_sec4_p5: '権利行使時には本人確認手続きを行います。処理結果は10日以内に通知されます。',
+
+    terms_section_5: '5. 個人情報保護責任者',
+    terms_section_6: '6. その他',
+    terms_sec6_p1: '- 本規約は韓国法に従って解釈され、紛争時には釜山地方裁判所を管轄裁判所とします。',
+    terms_sec6_p2: '- サービス利用中に発生する紛争は相互協議を通じて解決し、合意に至らない場合は法的手続きに従います。',
+
+    terms_section_7: '7. お問い合わせ',
+    terms_note: 'お問い合わせの際、アプリのバージョンとデバイス情報を含めていただけると、より迅速なサポートが可能です。',
   },
 
   zh: {
@@ -266,7 +502,7 @@ export const STRINGS = {
     check: '确认中...',
     later: '稍后',
     settings_move: '前往设置',
-    
+
     menu: '菜单',
     home: '首页',
     ad_remove_plan: '去广告方案',
@@ -275,7 +511,7 @@ export const STRINGS = {
     app_info: '应用信息',
     terms_privacy: '条款与隐私政策',
     subscription_manage: '订阅管理',
-    
+
     system_online: 'System Online',
     system_offline: 'System Offline',
     tap_to_start: '▲ TAP TO START ▲',
@@ -286,7 +522,7 @@ export const STRINGS = {
     free_badge: 'FREE VERSION',
     save_success: '保存成功',
     save_success_msg: '设置已应用到系统。',
-    
+
     premium_title: '高级版',
     premium_sub: '无广告，体验更流畅',
     quick_buy: '立即订阅',
@@ -309,7 +545,7 @@ export const STRINGS = {
     restore_complete: '恢复完成',
     restore_complete_msg: '高级版权益已恢复。',
     restore_fail_msg: '未找到可恢复的订阅记录。',
-    
+
     current_status: '当前状态',
     membership: '会员资格',
     premium_label: '高级版',
@@ -321,7 +557,9 @@ export const STRINGS = {
     check_complete: '检查完成',
     check_premium_msg: '当前已应用高级版。',
     check_free_msg: '当前是免费版本。',
-    
+    check_fail_msg: '验证失败。',
+    open_store_error: '无法打开商店。',
+
     language_select: '选择语言',
     korean: '한국어',
     english: 'English',
@@ -330,9 +568,85 @@ export const STRINGS = {
     lang_note: '部分消息可能取决于系统语言或设备设置。',
     apply_complete: '应用完成',
     apply_complete_msg: '已设置为中文。',
-    
+
     battery_title: '建议忽略电池优化',
     battery_msg: "为了防止应用在后台停止，请将电池使用量设置为“无限制”。\n\n即使不设置也可以运行，但可能会不稳定。",
     dont_show_again: '不再显示',
+
+    accessibility_title: '需要无障碍权限',
+    accessibility_msg: "检测音量键需要无障碍权限。\n\n请前往[设置]，在“已安装的应用”列表中将[Switching Service]设置为“开启”。",
+
+    basic_info: '基本信息',
+    version: '版本',
+    build_number: '构建版本',
+    sdk_version: 'SDK版本',
+    android_package: 'Android包名',
+    expo_config_note: '信息基于Expo配置(expoConfig)。',
+    dev_info: '开发者信息',
+    developer: '开发者',
+    contact: '联系方式',
+    website: '网站',
+    contact_note: '如有疑问或反馈，请通过邮件发送。',
+    app_desc_title: '应用说明',
+    app_desc_1: 'Switching 应用是一款通过音量减键快速切换应用的创新工具。',
+    app_desc_2: '主要功能：音量键即时启动、去广告、会话计时器等。',
+    app_desc_note: '查看帮助以了解更多详情。',
+    shortcuts: '快捷方式',
+    view_terms: '查看条款与隐私 ›',
+    open_help: '打开帮助 ›',
+    manage_sub_link: '管理订阅 ›',
+
+    faq_title: '常见问题',
+    support_title: '支持',
+    email_inquiry: '邮件咨询 ↗',
+    faq_1_q: '音量减键不起作用',
+    faq_1_a: '需要在Android设置中开启“无障碍权限”。\n设置 > 无障碍 > 已安装的应用 > 将Switching Service设置为“开启”。',
+    faq_2_q: 'System Online/Offline 是什么？',
+    faq_2_a: 'Online 表示“检测功能已激活”。\nOffline 表示功能已关闭。',
+    faq_3_q: '为什么会出现电池优化提示？',
+    faq_3_a: '为了在后台稳定运行，建议解除电池优化限制。',
+    faq_4_q: '高级版有什么不同？',
+    faq_4_a: '高级版移除了广告（横幅/插屏），体验更流畅。',
+    faq_5_q: '在哪里咨询？',
+    faq_5_a: '请使用下方的“邮件咨询”按钮。',
+
+    terms_summary: '摘要',
+    // [NEW] Terms Body (Chinese)
+    terms_summary_p1: '- 本文档说明 Soncine Inc. 提供的 Switching 应用的使用条款和隐私政策。使用本应用即视为同意本条款。',
+    terms_summary_p2: '- 我们最少化收集个人信息，并尽最大努力进行保护。详情请参阅下文。',
+    terms_summary_p3: '- 本条款可能因法律变更或服务更新而更改，变更时将通过应用内公告或邮件通知。',
+    
+    terms_section_1: '1. 服务提供',
+    terms_sec1_p1: 'Soncine Inc. 通过 Switching 应用提供用户通过音量减键快速启动选定目标应用的功能。该功能利用无障碍服务，支持免费版（含广告）和高级版（去广告，无限会话）。',
+    terms_sec1_p2: '服务的主要组成部分：\n- 目标应用的选择与存储\n- 系统在线/离线状态管理\n- 基于会话的计时器与进度显示\n- 订阅管理与广告显示',
+    terms_sec1_p3: '应用已针对 Android 设备进行优化，需要解除电池优化并开启无障碍权限。使用服务时产生的数据费用由用户承担。',
+
+    terms_section_2: '2. 收集和处理的个人信息',
+    terms_sec2_p1: '- 应用内设置值：目标应用包名、功能开启状态(isEnabled)、会话开始时间。这些存储在设备内的 SharedPreferences 或 AsyncStorage 中，用于提供应用功能。',
+    terms_sec2_p2: '- 订阅及购买信息：通过 Google Play 商店确认订阅状态，处理购买收据 ID 和产品 ID。这是激活高级功能所需的。',
+    terms_sec2_p3: '- 广告相关信息：可能通过 Google Mobile Ads SDK 收集广告 ID、设备信息（型号、操作系统版本）、IP 地址等。用于广告定位和展示，遵循 SDK 的隐私政策。',
+    terms_sec2_p4: '- 日志数据：应用崩溃或出错时，可能会收集匿名日志以改进服务。（可选，需用户同意）',
+    terms_sec2_p5: '除非法律要求，我们不会与第三方共享您的个人信息。但在广告 SDK 或支付处理所需范围内可能会共享。',
+
+    terms_section_3: '3. 个人信息存储与保护',
+    terms_sec3_p1: '- 存储期限：设置值在删除应用前一直存储在设备内。订阅信息在订阅期间保留，取消后立即删除。日志数据最多保存 90 天后删除。',
+    terms_sec3_p2: '- 保护措施：数据加密存储，并通过访问控制防止未经授权的访问。服务器端数据（如有）使用 SSL/TLS 协议。',
+    terms_sec3_p3: '- 销毁方法：保存期限结束后自动删除，使用不可恢复的方法（如：覆盖）处理。',
+    terms_sec3_p4: '我们遵守个人信息保护法，发生安全事故时将立即通知用户并采取应对措施。',
+
+    terms_section_4: '4. 用户权利及行使方法',
+    terms_sec4_p1: '- 查阅/更正/删除权：用户可随时查阅、更正、删除自己的个人信息。可在应用内设置中直接管理，或通过咨询邮件申请。',
+    terms_sec4_p2: '- 撤回同意：可以撤回个人信息收集同意，撤回时部分功能可能受限。',
+    terms_sec4_p3: '- 删除应用：删除应用将清除设备内的所有设置值。',
+    terms_sec4_p4: '- 取消订阅：请在 Google Play 商店管理订阅。取消时高级版权益立即终止。',
+    terms_sec4_p5: '行使权利时将进行身份验证。处理结果将在 10 日内通知。',
+
+    terms_section_5: '5. 个人信息保护负责人',
+    terms_section_6: '6. 其他',
+    terms_sec6_p1: '- 本条款依据韩国法律解释，发生纠纷时以釜山地方法院为管辖法院。',
+    terms_sec6_p2: '- 服务使用中发生的纠纷通过协商解决，未达成一致时遵循法律程序。',
+
+    terms_section_7: '7. 咨询',
+    terms_note: '咨询时请附上应用版本和设备信息，以便我们更快为您提供帮助。',
   }
 };

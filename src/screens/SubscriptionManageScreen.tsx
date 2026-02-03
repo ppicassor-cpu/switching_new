@@ -14,33 +14,32 @@ import {
 } from 'react-native';
 import * as IAP from 'react-native-iap';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const MONTHLY_SUB_SKU = 'monthly_sub';
 
 export default function SubscriptionManageScreen({ navigation }: any) {
+  const { t } = useLanguage();
+
   const [isChecking, setIsChecking] = useState(true);
   const [isPremium, setIsPremium] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // 🔔 커스텀 알림(Alert) 상태 관리
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const alertAnim = useRef(new Animated.Value(0)).current;
 
-  // 알림 표시 함수
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertVisible(true);
   };
 
-  // 알림 닫기 함수
   const hideAlert = () => {
     setAlertVisible(false);
   };
 
-  // 알림 애니메이션 효과
   useEffect(() => {
     Animated.timing(alertAnim, {
       toValue: alertVisible ? 1 : 0,
@@ -49,7 +48,6 @@ export default function SubscriptionManageScreen({ navigation }: any) {
     }).start();
   }, [alertVisible]);
 
-  // 뒤로가기 버튼 핸들링 (팝업이 켜져있으면 팝업만 닫기)
   useEffect(() => {
     const backAction = () => {
       if (alertVisible) {
@@ -102,7 +100,7 @@ export default function SubscriptionManageScreen({ navigation }: any) {
         await Linking.openURL('https://apps.apple.com/account/subscriptions');
       }
     } catch {
-      showAlert('알림', '스토어를 열 수 없습니다.');
+      showAlert(t('alert'), t('open_store_error'));
     }
   };
 
@@ -111,9 +109,9 @@ export default function SubscriptionManageScreen({ navigation }: any) {
     setBusy(true);
     try {
       await refreshEntitlement();
-      showAlert('확인 완료', isPremium ? '현재 프리미엄이 적용되어 있습니다.' : '현재 무료 버전입니다.');
+      showAlert(t('check_complete'), isPremium ? t('check_premium_msg') : t('check_free_msg'));
     } catch {
-      showAlert('알림', '확인에 실패했습니다.');
+      showAlert(t('alert'), t('check_fail_msg'));
     } finally {
       setBusy(false);
     }
@@ -127,32 +125,32 @@ export default function SubscriptionManageScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85} style={styles.backBtn}>
           <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>구독관리</Text>
+        <Text style={styles.headerTitle}>{t('subscription_manage')}</Text>
         <View style={styles.headerRight} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>현재 상태</Text>
+          <Text style={styles.cardTitle}>{t('current_status')}</Text>
           <View style={styles.rowBetween}>
-            <Text style={styles.label}>멤버십</Text>
+            <Text style={styles.label}>{t('membership')}</Text>
             <View style={[styles.pill, isPremium ? styles.pillOn : styles.pillOff]}>
               <Text style={[styles.pillTxt, isPremium ? styles.pillTxtOn : styles.pillTxtOff]}>
-                {isChecking ? '확인 중…' : isPremium ? '프리미엄' : 'FREE'}
+                {isChecking ? t('check') : isPremium ? t('premium_label') : t('free_label')}
               </Text>
             </View>
           </View>
 
           <Text style={styles.desc}>
-            구독 변경/해지는 스토어 설정에서 진행됩니다. 앱 내에서는 상태 확인 및 링크 이동을 제공합니다.
+            {t('sub_manage_desc')}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>관리</Text>
+          <Text style={styles.cardTitle}>{t('manage_section')}</Text>
 
           <TouchableOpacity activeOpacity={0.85} onPress={openStoreSubscription} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnTxt}>스토어에서 구독 관리 열기 ↗</Text>
+            <Text style={styles.primaryBtnTxt}>{t('open_store')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -161,7 +159,7 @@ export default function SubscriptionManageScreen({ navigation }: any) {
             style={[styles.secondaryBtn, busy && styles.btnDisabled]}
             disabled={busy}
           >
-            <Text style={styles.secondaryBtnTxt}>{busy ? '확인 중…' : '구매 내역 다시 확인'}</Text>
+            <Text style={styles.secondaryBtnTxt}>{busy ? t('check') : t('check_history_again')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -169,12 +167,11 @@ export default function SubscriptionManageScreen({ navigation }: any) {
             onPress={() => navigation.navigate('AdRemovePlan')}
             style={styles.linkBtn}
           >
-            <Text style={styles.linkTxt}>광고제거 플랜 화면으로 이동 ›</Text>
+            <Text style={styles.linkTxt}>{t('go_to_ad_remove')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* ✅ 커스텀 팝업 (Alert Replacement) */}
       <Animated.View 
         pointerEvents={alertVisible ? "auto" : "none"}
         style={[styles.alertRoot, { opacity: alertAnim }]}
@@ -188,7 +185,7 @@ export default function SubscriptionManageScreen({ navigation }: any) {
               onPress={hideAlert}
               style={styles.alertButton}
             >
-              <Text style={styles.alertButtonText}>확인</Text>
+              <Text style={styles.alertButtonText}>{t('confirm')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -274,7 +271,6 @@ const styles = StyleSheet.create({
 
   btnDisabled: { opacity: 0.55 },
 
-  // --- 커스텀 팝업 스타일 ---
   alertRoot: {
     position: 'absolute',
     left: 0,

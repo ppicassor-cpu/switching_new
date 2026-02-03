@@ -2,42 +2,45 @@
 import React, { useMemo, useState } from 'react';
 import { Linking, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../contexts/LanguageContext';
 
 type FaqItem = { q: string; a: string };
 
 export default function HelpScreen({ navigation }: any) {
+  const { t } = useLanguage();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   const faq = useMemo<FaqItem[]>(
     () => [
       {
-        q: '볼륨다운이 동작하지 않아요',
-        a: '안드로이드 설정에서 “접근성 권한”이 필요합니다.\n설정 > 접근성 > 설치된 앱에서 스위칭 서비스를 “사용”으로 변경해주세요.',
+        q: t('faq_1_q'),
+        a: t('faq_1_a'),
       },
       {
-        q: 'System Online/Offline은 무엇인가요?',
-        a: 'Online은 “감지/실행 기능이 활성화된 상태”를 의미합니다.\nOffline은 기능이 꺼진 상태입니다.',
+        q: t('faq_2_q'),
+        a: t('faq_2_a'),
       },
       {
-        q: '배터리 최적화 안내가 뜨는 이유',
-        a: '백그라운드에서 안정적으로 동작하려면 배터리 최적화(절전) 제한을 해제하는 것이 도움이 됩니다.',
+        q: t('faq_3_q'),
+        a: t('faq_3_a'),
       },
       {
-        q: '프리미엄은 무엇이 달라지나요?',
-        a: '프리미엄은 광고(배너/전면) 노출이 제거되고, 더 쾌적한 사용이 가능합니다.',
+        q: t('faq_4_q'),
+        a: t('faq_4_a'),
       },
       {
-        q: '문의는 어디로 하나요?',
-        a: '아래 “이메일 문의” 버튼을 이용해주세요.',
+        q: t('faq_5_q'),
+        a: t('faq_5_a'),
       },
     ],
-    []
+    [t]
   );
 
   const onPressEmail = async () => {
     const subject = encodeURIComponent('[Switching] 문의');
     const body = encodeURIComponent('가능하면 아래 정보를 함께 적어주세요:\n- 기기 모델\n- 안드로이드/아이폰 버전\n- 재현 방법\n- 발생 시점\n');
-    const url = `mailto:ppicassor@gmail..com?subject=${subject}&body=${body}`;
+    // ✅ 이메일 주소 오타 수정 (gmail..com -> gmail.com)
+    const url = `mailto:ppicassor@gmail.com?subject=${subject}&body=${body}`;
     try {
       await Linking.openURL(url);
     } catch {}
@@ -51,13 +54,13 @@ export default function HelpScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85} style={styles.backBtn}>
           <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>도움말</Text>
+        <Text style={styles.headerTitle}>{t('help')}</Text>
         <View style={styles.headerRight} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} bounces={false}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>자주 묻는 질문</Text>
+          <Text style={styles.cardTitle}>{t('faq_title')}</Text>
 
           {faq.map((item, idx) => {
             const open = openIndex === idx;
@@ -78,10 +81,10 @@ export default function HelpScreen({ navigation }: any) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>지원</Text>
+          <Text style={styles.cardTitle}>{t('support_title')}</Text>
 
           <TouchableOpacity activeOpacity={0.85} onPress={onPressEmail} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnTxt}>이메일 문의 ↗</Text>
+            <Text style={styles.primaryBtnTxt}>{t('email_inquiry')}</Text>
           </TouchableOpacity>
           
         </View>

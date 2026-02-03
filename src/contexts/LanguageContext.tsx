@@ -27,7 +27,7 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(LANG_KEY);
-        // ✅ 4개 국어(ko, en, ja, zh) 모두 체크하도록 조건 업데이트
+        // ✅ 4개 국어(ko, en, ja, zh) 모두 체크
         if (saved === 'ko' || saved === 'en' || saved === 'ja' || saved === 'zh') {
           setLanguage(saved as LanguageMode);
         }
@@ -44,16 +44,11 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   // 번역 헬퍼 함수 (t)
-  // 사용법: t('home') -> 현재 언어에 맞는 번역된 문자열 반환
   const t = (key: string) => {
-    // 1. 현재 언어 팩 가져오기 (ko/en/ja/zh)
     const currentStrings = STRINGS[language];
-    
-    // 2. 해당 키에 맞는 문구 찾기
     const text = (currentStrings as any)[key];
-
-    // 3. 문구가 없으면 키 그대로 반환 (에러 방지용)
-    return text || key;
+    const koText = (STRINGS.ko as any)[key];
+    return text || koText || key;
   };
 
   return (

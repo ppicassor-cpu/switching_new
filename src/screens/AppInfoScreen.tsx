@@ -3,8 +3,11 @@ import Constants from 'expo-constants';
 import React from 'react';
 import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function AppInfoScreen({ navigation }: any) {
+  const { t } = useLanguage();
+
   const appName = (Constants.expoConfig as any)?.name ?? 'Switching';
   const version = (Constants.expoConfig as any)?.version ?? '-';
   const androidPackage = (Constants.expoConfig as any)?.android?.package ?? '-';
@@ -22,7 +25,7 @@ export default function AppInfoScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85} style={styles.backBtn}>
           <Text style={styles.backTxt}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>앱정보</Text>
+        <Text style={styles.headerTitle}>{t('app_info')}</Text>
         <View style={styles.headerRight} />
       </View>
 
@@ -33,88 +36,82 @@ export default function AppInfoScreen({ navigation }: any) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>기본 정보</Text>
+          <Text style={styles.cardTitle}>{t('basic_info')}</Text>
 
           <View style={styles.row}>
-            <Text style={styles.label}>버전</Text>
+            <Text style={styles.label}>{t('version')}</Text>
             <Text style={styles.value} numberOfLines={1}>{version}</Text>
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.label}>빌드 번호</Text>
+            <Text style={styles.label}>{t('build_number')}</Text>
             <Text style={styles.value} numberOfLines={1}>{buildNumber}</Text>
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.label}>SDK 버전</Text>
+            <Text style={styles.label}>{t('sdk_version')}</Text>
             <Text style={styles.value} numberOfLines={1}>{sdkVersion}</Text>
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.label}>Android 패키지</Text>
+            <Text style={styles.label}>{t('android_package')}</Text>
             <Text style={styles.value} numberOfLines={1}>{androidPackage}</Text>
           </View>
 
           <Text style={styles.note}>
-            표시 정보는 Expo 설정(expoConfig) 기준입니다. (환경에 따라 일부 값이 비어 있을 수 있습니다)
+            {t('expo_config_note')}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>개발자 정보</Text>
+          <Text style={styles.cardTitle}>{t('dev_info')}</Text>
 
           <View style={styles.row}>
-            <Text style={styles.label}>개발자</Text>
+            <Text style={styles.label}>{t('developer')}</Text>
             <Text style={styles.value} numberOfLines={1}>{developer}</Text>
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.label}>연락처</Text>
+            <Text style={styles.label}>{t('contact')}</Text>
             <Text style={styles.value} numberOfLines={1}>{contactEmail}</Text>
           </View>
 
           <View style={styles.row}>
-            <Text style={styles.label}>웹사이트</Text>
+            <Text style={styles.label}>{t('website')}</Text>
             <Text style={styles.value} numberOfLines={1}>{website}</Text>
           </View>
 
           <Text style={styles.note}>
-            앱 관련 문의나 피드백은 이메일로 보내주세요. 빠른 시일 내에 답변드리겠습니다.
+            {t('contact_note')}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>앱 설명</Text>
+          <Text style={styles.cardTitle}>{t('app_desc_title')}</Text>
           <Text style={styles.description}>
-            Switching 앱은 볼륨 다운 버튼으로 빠르게 앱을 전환할 수 있는 혁신적인 도구입니다. 
-            접근성 서비스를 활용하여 백그라운드에서 동작하며, 무료 버전과 프리미엄 플랜을 제공합니다. 
-            배터리 최적화 해제와 접근성 권한이 필요하며, 세션 기반으로 동작하여 안정성을 보장합니다.
+            {t('app_desc_1')}
           </Text>
           <Text style={styles.description}>
-            주요 기능:
-            - 볼륨 다운 버튼으로 타겟 앱 즉시 실행
-            - 설치된 앱 목록 표시 및 선택
-            - 프리미엄 플랜으로 광고 제거
-            - 세션 타이머와 프로그레스 바
+            {t('app_desc_2')}
           </Text>
           <Text style={styles.note}>
-            앱을 더 잘 활용하기 위해 도움말을 확인하세요.
+            {t('app_desc_note')}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>바로가기</Text>
+          <Text style={styles.cardTitle}>{t('shortcuts')}</Text>
 
           <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('TermsPrivacy')} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnTxt}>약관 및 개인정보처리지침 보기 ›</Text>
+            <Text style={styles.primaryBtnTxt}>{t('view_terms')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('Help')} style={styles.secondaryBtn}>
-            <Text style={styles.secondaryBtnTxt}>도움말 열기 ›</Text>
+            <Text style={styles.secondaryBtnTxt}>{t('open_help')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('SubscriptionManage')} style={styles.secondaryBtn}>
-            <Text style={styles.secondaryBtnTxt}>구독 관리 ›</Text>
+            <Text style={styles.secondaryBtnTxt}>{t('manage_sub_link')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

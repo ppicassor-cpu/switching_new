@@ -24,13 +24,14 @@ import 'react-native-gesture-handler';
 import mobileAds, { AdEventType, BannerAd, BannerAdSize, InterstitialAd, MaxAdContentRating, TestIds } from 'react-native-google-mobile-ads';
 import * as IAP from 'react-native-iap';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-
+import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
 import AdRemovePlanScreen from './src/screens/AdRemovePlanScreen';
 import AppInfoScreen from './src/screens/AppInfoScreen';
 import HelpScreen from './src/screens/HelpScreen';
 import LanguageScreen from './src/screens/LanguageScreen';
 import SubscriptionManageScreen from './src/screens/SubscriptionManageScreen';
 import TermsPrivacyScreen from './src/screens/TermsPrivacyScreen';
+
 const { AppSwitchModule } = NativeModules;
 
 const Stack = createNativeStackNavigator();
@@ -47,7 +48,6 @@ const AD_REQUEST_OPTIONS = {
 const SESSION_START_AT_KEY = 'SWITCHING_SESSION_START_AT';
 const SESSION_DURATION_MS = 60 * 60 * 1000;
 const BATTERY_OPT_PROMPTED_KEY = 'SWITCHING_BATTERY_OPT_PROMPTED';
-// ✅ [추가] 프리미엄 상태 확인용 키
 const PREMIUM_CACHE_KEY = 'SWITCHING_IS_PREMIUM';
 
 interface AppInfo {
@@ -96,6 +96,8 @@ const navTheme = {
 };
 
 function HomeScreen({ navigation }: any) {
+  const { t } = useLanguage();
+
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const interstitialRef = useRef<any>(null);
   const adLoadedRef = useRef<boolean>(false);
@@ -122,7 +124,7 @@ function HomeScreen({ navigation }: any) {
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
-  const [alertButtons, setAlertButtons] = useState<CustomAlertButton[]>([{ text: '확인' }]);
+  const [alertButtons, setAlertButtons] = useState<CustomAlertButton[]>([{ text: t('confirm') }]);
 
   const stateRef = useRef<AppState>({ targetPackage, isEnabled, isPremium });
 
@@ -137,7 +139,6 @@ function HomeScreen({ navigation }: any) {
   const sideMenuAnim = useRef(new Animated.Value(0)).current;
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
   const [sideMenuActive, setSideMenuActive] = useState(false);
-  
 
   const alertAnim = useRef(new Animated.Value(0)).current;
   const [alertActive, setAlertActive] = useState(false);
@@ -168,7 +169,7 @@ function HomeScreen({ navigation }: any) {
   const showAlert = (title: string, message?: string, buttons?: CustomAlertButton[]) => {
     setAlertTitle(title || '');
     setAlertMessage(message || '');
-    const b = buttons && buttons.length ? buttons : [{ text: '확인' }];
+    const b = buttons && buttons.length ? buttons : [{ text: t('confirm') }];
     setAlertButtons(b);
     setAlertVisible(true);
   };
@@ -198,7 +199,6 @@ function HomeScreen({ navigation }: any) {
     alertAnim.setValue(0);
   };
 
-  // ✅ [수정] 화면 포커스 시 프리미엄 상태 즉시 확인 (홈 화면 갱신용)
   useEffect(() => {
     const unsubFocus = navigation.addListener('focus', () => {
       forceCloseTransientUI();
@@ -213,23 +213,20 @@ function HomeScreen({ navigation }: any) {
     };
   }, [navigation]);
 
-  // ✅ [추가] 프리미엄 상태 체크 함수
   const checkPremiumStatus = async () => {
     try {
       const cached = await AsyncStorage.getItem(PREMIUM_CACHE_KEY);
       if (cached === '1') {
         setIsPremium(true);
-        // 프리미엄이면 타이머 초기화 (무제한)
         clearSessionTimers();
-        progressAnim.setValue(0); // 로고 상태 고정
+        progressAnim.setValue(0);
       } else {
-        // 캐시가 없으면 IAP 재확인 (안전장치)
         const purchases = await IAP.getAvailablePurchases();
         const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
         setIsPremium(hasSub);
         if (hasSub) {
-            clearSessionTimers();
-            progressAnim.setValue(0);
+          clearSessionTimers();
+          progressAnim.setValue(0);
         }
       }
     } catch {}
@@ -242,7 +239,6 @@ function HomeScreen({ navigation }: any) {
     pendingNavRef.current = { name, params };
     setSideMenuVisible(false);
   };
-
 
   const pressAlertButton = (btn: CustomAlertButton) => {
     setAlertVisible(false);
@@ -267,7 +263,6 @@ function HomeScreen({ navigation }: any) {
   const ensureBatteryOptimizationIgnored = async () => {
     if (Platform.OS !== 'android') return true;
 
-    // 1. [최우선] 실제 시스템 설정값을 먼저 확인합니다.
     let isSystemIgnored = false;
     try {
       if (AppSwitchModule?.isBatteryOptimizationIgnored) {
@@ -275,35 +270,29 @@ function HomeScreen({ navigation }: any) {
       }
     } catch {}
 
-    // ✅ 이미 '제한 없음' 상태라면 바로 통과
     if (isSystemIgnored === true) return true;
 
-    // 2. 시스템 설정이 안 되어 있다면, 사용자가 '다시 보지 않기'를 눌렀는지 확인합니다.
     const prompted = await AsyncStorage.getItem(BATTERY_OPT_PROMPTED_KEY);
     if (prompted === '1') {
       return true;
     }
 
-    // 3. (설정 안 됨) AND (알림 끄지 않음) 상태일 때만 팝업을 띄웁니다.
     resetAdGateState();
     showAlert(
-      "배터리 최적화 해제 권장",
-      "백그라운드에서 앱이 꺼지지 않으려면 배터리 설정을 '제한 없음'으로 변경해야 합니다.\n\n변경하지 않아도 실행은 되지만, 도중에 멈출 수 있습니다.",
+      t('battery_title'),
+      t('battery_msg'),
       [
         {
-          text: "다시 보지 않기",
+          text: t('dont_show_again'),
           style: "cancel",
           onPress: () => {
-            // ✅ "이제 그만 물어봐"라고 저장
             void AsyncStorage.setItem(BATTERY_OPT_PROMPTED_KEY, '1');
-            
-            // ✅ 방금 누른 건 즉시 실행되도록 처리
             batteryBypassOnceRef.current = true;
             setTimeout(() => { void toggleEnabledByLogo(); }, 0);
           }
         },
         {
-          text: "설정 이동",
+          text: t('settings_move'),
           onPress: () => {
             void openBatteryOptimizationSettings();
           }
@@ -421,11 +410,10 @@ function HomeScreen({ navigation }: any) {
   };
 
   const syncSession = async () => {
-    // ✅ [수정] 프리미엄 유저는 세션 타이머 로직 무시
     if (stateRef.current.isPremium) {
-        clearSessionTimers();
-        progressAnim.setValue(0);
-        return null; // 타이머 기반 시작 아님
+      clearSessionTimers();
+      progressAnim.setValue(0);
+      return null;
     }
 
     const saved = await AsyncStorage.getItem(SESSION_START_AT_KEY);
@@ -467,15 +455,14 @@ function HomeScreen({ navigation }: any) {
   };
 
   const startNewSessionAndEnable = async (pkgOverride?: string) => {
-    // ✅ [수정] 프리미엄 유저는 타이머 없이 바로 시작 처리
     if (stateRef.current.isPremium) {
-        setIsEnabled(true);
-        if (AppSwitchModule?.saveSettings) {
-            AppSwitchModule.saveSettings(pkgOverride ?? stateRef.current.targetPackage, true);
-        }
-        clearSessionTimers();
-        progressAnim.setValue(0); // 로고 상태 활성화 고정
-        return;
+      setIsEnabled(true);
+      if (AppSwitchModule?.saveSettings) {
+        AppSwitchModule.saveSettings(pkgOverride ?? stateRef.current.targetPackage, true);
+      }
+      clearSessionTimers();
+      progressAnim.setValue(0);
+      return;
     }
 
     const now = Date.now();
@@ -508,7 +495,7 @@ function HomeScreen({ navigation }: any) {
 
     if (!ad?.show || !ad?.load) {
       resetAdGateState();
-      showAlert("알림", "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      showAlert(t('alert'), "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
       return;
     }
 
@@ -521,7 +508,7 @@ function HomeScreen({ navigation }: any) {
       ad.show();
     } else {
       ad.load();
-      showAlert("알림", "광고 로딩 중입니다. 잠시만 기다려주세요.");
+      showAlert(t('alert'), "광고 로딩 중입니다. 잠시만 기다려주세요.");
     }
   };
 
@@ -549,10 +536,10 @@ function HomeScreen({ navigation }: any) {
           const purchases = await IAP.getAvailablePurchases();
           const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
           if (mounted) {
-             setIsPremium(hasSub);
-             if (hasSub) {
-                 await AsyncStorage.setItem(PREMIUM_CACHE_KEY, '1');
-             }
+            setIsPremium(hasSub);
+            if (hasSub) {
+              await AsyncStorage.setItem(PREMIUM_CACHE_KEY, '1');
+            }
           }
         } catch (e) {
           console.warn("IAP Init Fail:", e);
@@ -610,7 +597,7 @@ function HomeScreen({ navigation }: any) {
             resetAdGateState();
 
             if (mounted && wasGated) {
-              showAlert("알림", "광고를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+              showAlert(t('alert'), "광고를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
             }
 
             const code = String(err?.code || '');
@@ -654,13 +641,12 @@ function HomeScreen({ navigation }: any) {
               return;
             }
 
-            // 프리미엄이면 타이머 없이, 아니면 타이머 시작
             if (stateRef.current.isPremium) {
-                setIsEnabled(true);
-                clearSessionTimers();
-                progressAnim.setValue(0);
+              setIsEnabled(true);
+              clearSessionTimers();
+              progressAnim.setValue(0);
             } else {
-                void startNewSessionAndEnable(pkg || stateRef.current.targetPackage);
+              void startNewSessionAndEnable(pkg || stateRef.current.targetPackage);
             }
           }).catch(() => {});
         } else {
@@ -702,7 +688,6 @@ function HomeScreen({ navigation }: any) {
 
     if (!enabled || !pkg) return;
 
-    // 광고 없이 즉시 실행
     launchTargetApp();
   }
 
@@ -715,7 +700,7 @@ function HomeScreen({ navigation }: any) {
 
   const handleSaveWithLogic = async () => {
     if (!targetPackage) {
-      showAlert("알림", "앱을 선택해주세요.");
+      showAlert(t('alert'), "앱을 선택해주세요.");
       return;
     }
 
@@ -730,7 +715,7 @@ function HomeScreen({ navigation }: any) {
 
     if (!adLoadedRef.current) {
       ad?.load();
-      showAlert("알림", "광고를 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
+      showAlert(t('alert'), "광고를 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
       return;
     }
 
@@ -744,13 +729,13 @@ function HomeScreen({ navigation }: any) {
   const saveSettings = () => {
     if (AppSwitchModule?.saveSettings) {
       AppSwitchModule.saveSettings(targetPackage, isEnabled);
-      showAlert("저장 성공", ` 설정이 시스템에 반영되었습니다.`);
+      showAlert(t('save_success'), t('save_success_msg'));
     }
   };
 
   const toggleEnabledByLogo = async () => {
     if (!targetPackage) {
-      showAlert("알림", "앱을 선택해주세요.");
+      showAlert(t('alert'), "앱을 선택해주세요.");
       return;
     }
 
@@ -762,11 +747,11 @@ function HomeScreen({ navigation }: any) {
         if (!isGranted) {
           resetAdGateState();
           showAlert(
-            "접근성 권한 필요",
-            "볼륨 키를 감지하려면 접근성 권한이 필요합니다.\n\n[설정 이동] 후 '설치된 앱' 목록에서 [스위칭 서비스]를 '사용'으로 바꿔주세요.",
+            t('accessibility_title'),
+            t('accessibility_msg'),
             [
-              { text: "나중에", style: "cancel" },
-              { text: "설정 이동", onPress: () => AppSwitchModule.openAccessibilitySettings() }
+              { text: t('later'), style: "cancel" },
+              { text: t('settings_move'), onPress: () => AppSwitchModule.openAccessibilitySettings() }
             ]
           );
           return;
@@ -796,10 +781,9 @@ function HomeScreen({ navigation }: any) {
     }
 
     if (isPremium) {
-      // ✅ [수정] 프리미엄은 바로 실행 (세션 로직 호출 X)
       setIsEnabled(true);
       if (AppSwitchModule?.saveSettings) {
-         AppSwitchModule.saveSettings(targetPackage, true);
+        AppSwitchModule.saveSettings(targetPackage, true);
       }
       clearSessionTimers();
       progressAnim.setValue(0);
@@ -837,329 +821,330 @@ function HomeScreen({ navigation }: any) {
 
   const alertHasTwo = alertButtons.length >= 2;
   const primaryIndex = alertHasTwo ? 1 : 0;
-  const primaryBtn = alertButtons[primaryIndex] || { text: '확인' };
+  const primaryBtn = alertButtons[primaryIndex] || { text: t('confirm') };
   const secondaryBtn = alertHasTwo ? alertButtons[0] : null;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
-        <SafeAreaView pointerEvents="none" edges={['top', 'left', 'right']} style={styles.gaugeSafeArea}>
-          {/* ✅ [수정] 프리미엄일 경우 게이지 바 숨김 */}
-          <View style={[styles.gaugeOuter, { opacity: (isEnabled && !isPremium) ? 1 : 0 }]}>
-            <Animated.View
-              style={[
-                styles.gaugeInner,
-                {
-                  transform: [
-                    { translateX: -width / 2 },
-                    { scaleX: gaugeScaleX as any },
-                    { translateX: width / 2 },
-                  ],
-                },
-              ]}
-            />
-          </View>
-        </SafeAreaView>
+      <SafeAreaView pointerEvents="none" edges={['top', 'left', 'right']} style={styles.gaugeSafeArea}>
+        <View style={[styles.gaugeOuter, { opacity: (isEnabled && !isPremium) ? 1 : 0 }]}>
+          <Animated.View
+            style={[
+              styles.gaugeInner,
+              {
+                transform: [
+                  { translateX: -width / 2 },
+                  { scaleX: gaugeScaleX as any },
+                  { translateX: width / 2 },
+                ],
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
 
-        <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
-          <View style={styles.headerArea}>
-            <TouchableOpacity onPress={openSideMenu} activeOpacity={0.85} style={styles.menuButton}>
-              <Text style={styles.menuButtonText}>☰</Text>
-            </TouchableOpacity>
-            <View style={[styles.premiumBadge, isPremium ? styles.badgePremium : styles.badgeFree]}>
-              <Text style={styles.premiumText}>
-                {isPremium ? "💎 PREMIUM" : "FREE VERSION"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.mainContent}>
-            <TouchableOpacity
-              onPress={toggleEnabledByLogo}
-              activeOpacity={0.9}
-              style={[styles.logoContainer, isEnabled && styles.logoGlow]}
-            >
-              <View style={styles.logoStack}>
-                <Image
-                  source={require('./assets/app-logo.png')}
-                  style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? 0 : 0.4 }]}
-                  resizeMode="contain"
-                />
-                <Animated.Image
-                  source={require('./assets/app-logo2.png')}
-                  style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? (logo2Opacity as any) : 0 }]}
-                  resizeMode="contain"
-                />
-                <Animated.Image
-                  source={require('./assets/app-logo.png')}
-                  style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? (logoOpacity as any) : 0 }]}
-                  resizeMode="contain"
-                />
-              </View>
-            </TouchableOpacity>
-
-            <Text style={[styles.statusLabel, { color: isEnabled ? '#1dd4f5' : '#555' }]}>
-              {isEnabled ? "System Online" : "System Offline"}
+      <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
+        <View style={styles.headerArea}>
+          <TouchableOpacity onPress={openSideMenu} activeOpacity={0.85} style={styles.menuButton}>
+            <Text style={styles.menuButtonText}>☰</Text>
+          </TouchableOpacity>
+          <View style={[styles.premiumBadge, isPremium ? styles.badgePremium : styles.badgeFree]}>
+            <Text style={styles.premiumText}>
+              {isPremium ? t('premium_badge') : t('free_badge')}
             </Text>
-
-            <Text
-              pointerEvents="none"
-              style={[styles.tapToStartHint, { opacity: isEnabled ? 0 : 1 }]}
-            >
-              ▲ TAB TO START ▲
-            </Text>
-
-            <View style={styles.cardContainer}>
-              <Text style={styles.cardLabel}>TARGET APP</Text>
-              <TouchableOpacity
-                style={styles.appCard}
-                onPress={() => setModalVisible(true)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.cardIcon, { backgroundColor: targetIconUri ? 'transparent' : (targetLabel ? '#007AFF' : '#222') }]}>
-                  {targetIconUri ? (
-                    <Image
-                      source={{ uri: targetIconUri }}
-                      style={{ width: 38, height: 38, borderRadius: 10 }}
-                    />
-                  ) : (
-                    <Text style={styles.cardIconText}>{targetLabel ? targetLabel.charAt(0) : '?'}</Text>
-                  )}
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {targetLabel || "앱 선택하기"}
-                  </Text>
-                  <Text style={styles.cardSubTitle} numberOfLines={1}>
-                    {targetPackage || "Touch to select target"}
-                  </Text>
-                </View>
-                <View style={styles.cardArrow}>
-                  <Text style={styles.arrowText}>›</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.footerArea}>
-              <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>                 
-                <Text style={styles.fabText}>Save</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </SafeAreaView>
+        </View>
 
-        <SafeAreaView style={styles.adSafeArea} edges={['bottom']}>
-          <View style={styles.adContainer}>
-            <BannerAd
-              unitId={BANNER_UNIT_ID}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-              requestOptions={AD_REQUEST_OPTIONS}
-            />
-          </View>
-        </SafeAreaView>
+        <View style={styles.mainContent}>
+          <TouchableOpacity
+            onPress={toggleEnabledByLogo}
+            activeOpacity={0.9}
+            style={[styles.logoContainer, isEnabled && styles.logoGlow]}
+          >
+            <View style={styles.logoStack}>
+              <Image
+                source={require('./assets/app-logo.png')}
+                style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? 0 : 0.4 }]}
+                resizeMode="contain"
+              />
+              <Animated.Image
+                source={require('./assets/app-logo2.png')}
+                style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? (logo2Opacity as any) : 0 }]}
+                resizeMode="contain"
+              />
+              <Animated.Image
+                source={require('./assets/app-logo.png')}
+                style={[styles.logoImage, styles.logoAbsolute, { opacity: isEnabled ? (logoOpacity as any) : 0 }]}
+                resizeMode="contain"
+              />
+            </View>
+          </TouchableOpacity>
 
-        <Animated.View
-          pointerEvents={overlayActive ? "auto" : "none"}
-          style={[styles.overlayRoot, { opacity: overlayAnim }]}
-        >
-          <View style={styles.modalOverlay}>
+          <Text style={[styles.statusLabel, { color: isEnabled ? '#1dd4f5' : '#555' }]}>
+            {isEnabled ? t('system_online') : t('system_offline')}
+          </Text>
+
+          <Text
+            pointerEvents="none"
+            style={[styles.tapToStartHint, { opacity: isEnabled ? 0 : 1 }]}
+          >
+            {t('tap_to_start')}
+          </Text>
+
+          <View style={styles.cardContainer}>
+            <Text style={styles.cardLabel}>{t('target_app')}</Text>
             <TouchableOpacity
-              style={StyleSheet.absoluteFillObject}
-              activeOpacity={1}
-              onPress={() => setModalVisible(false)}
-            />
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select App</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                  <Text style={styles.closeText}>✕</Text>
-                </TouchableOpacity>
+              style={styles.appCard}
+              onPress={() => setModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.cardIcon, { backgroundColor: targetIconUri ? 'transparent' : (targetLabel ? '#007AFF' : '#222') }]}>
+                {targetIconUri ? (
+                  <Image
+                    source={{ uri: targetIconUri }}
+                    style={{ width: 38, height: 38, borderRadius: 10 }}
+                  />
+                ) : (
+                  <Text style={styles.cardIconText}>{targetLabel ? targetLabel.charAt(0) : '?'}</Text>
+                )}
               </View>
-              {loading ? (
-                <Text style={styles.emptyText}>Loading apps...</Text>
-              ) : (
-                <FlatList
-                  data={appList}
-                  renderItem={renderItem}
-                  keyExtractor={(item) => item.packageName}
-                  contentContainerStyle={styles.listContent}
-                  ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
-                  indicatorStyle="white"
-                />
-              )}
-            </View>
-          </View>
-        </Animated.View>
-
-        <Animated.View
-          pointerEvents={alertActive ? "auto" : "none"}
-          style={[styles.alertRoot, { opacity: alertAnim }]}
-        >
-          <View style={styles.alertOverlay}>
-            <View style={StyleSheet.absoluteFillObject} />
-            <View style={styles.alertBox}>
-              <Text style={styles.alertTitle}>{alertTitle}</Text>
-              {!!alertMessage && <Text style={styles.alertMessage}>{alertMessage}</Text>}
-              <View style={[styles.alertButtonsRow, alertHasTwo ? styles.alertButtonsTwo : styles.alertButtonsOne]}>
-                {secondaryBtn ? (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => pressAlertButton(secondaryBtn)}
-                    style={[styles.alertButton, styles.alertButtonSecondary]}
-                  >
-                    <Text style={styles.alertButtonSecondaryText}>{secondaryBtn.text}</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => pressAlertButton(primaryBtn)}
-                  style={[
-                    styles.alertButton,
-                    styles.alertButtonPrimary,
-                    alertHasTwo ? styles.alertButtonPrimaryTwo : styles.alertButtonPrimaryOne
-                  ]}
-                >
-                  <Text style={styles.alertButtonPrimaryText}>{primaryBtn.text}</Text>
-                </TouchableOpacity>
+              <View style={styles.cardInfo}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {targetLabel || t('select_app')}
+                </Text>
+                <Text style={styles.cardSubTitle} numberOfLines={1}>
+                  {targetPackage || t('touch_to_select')}
+                </Text>
               </View>
-            </View>
+              <View style={styles.cardArrow}>
+                <Text style={styles.arrowText}>›</Text>
+              </View>
+            </TouchableOpacity>
           </View>
-        </Animated.View>
 
-        <Animated.View
-          pointerEvents={sideMenuActive ? "auto" : "none"}
-          style={[styles.sideMenuRoot, { opacity: sideMenuAnim }]}
-        >
+          <View style={styles.footerArea}>
+            <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>
+              <Text style={styles.fabText}>{t('save')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      <SafeAreaView style={styles.adSafeArea} edges={['bottom']}>
+        <View style={styles.adContainer}>
+          <BannerAd
+            unitId={BANNER_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={AD_REQUEST_OPTIONS}
+          />
+        </View>
+      </SafeAreaView>
+
+      <Animated.View
+        pointerEvents={overlayActive ? "auto" : "none"}
+        style={[styles.overlayRoot, { opacity: overlayAnim }]}
+      >
+        <View style={styles.modalOverlay}>
           <TouchableOpacity
             style={StyleSheet.absoluteFillObject}
             activeOpacity={1}
-            onPress={closeSideMenu}
+            onPress={() => setModalVisible(false)}
           />
-          <Animated.View
-            style={[
-              styles.sideMenuPanel,
-              { transform: [{ translateX: sideMenuTranslateX as any }] },
-            ]}
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('select_app')}</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
+                <Text style={styles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {loading ? (
+              <Text style={styles.emptyText}>{t('loading')}</Text>
+            ) : (
+              <FlatList
+                data={appList}
+                renderItem={renderItem}
+                keyExtractor={(item) => item.packageName}
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={<Text style={styles.emptyText}>No apps found.</Text>}
+                indicatorStyle="white"
+              />
+            )}
+          </View>
+        </View>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={alertActive ? "auto" : "none"}
+        style={[styles.alertRoot, { opacity: alertAnim }]}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={StyleSheet.absoluteFillObject} />
+          <View style={styles.alertBox}>
+            <Text style={styles.alertTitle}>{alertTitle}</Text>
+            {!!alertMessage && <Text style={styles.alertMessage}>{alertMessage}</Text>}
+            <View style={[styles.alertButtonsRow, alertHasTwo ? styles.alertButtonsTwo : styles.alertButtonsOne]}>
+              {secondaryBtn ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => pressAlertButton(secondaryBtn)}
+                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                >
+                  <Text style={styles.alertButtonSecondaryText}>{secondaryBtn.text}</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => pressAlertButton(primaryBtn)}
+                style={[
+                  styles.alertButton,
+                  styles.alertButtonPrimary,
+                  alertHasTwo ? styles.alertButtonPrimaryTwo : styles.alertButtonPrimaryOne
+                ]}
+              >
+                <Text style={styles.alertButtonPrimaryText}>{primaryBtn.text}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={sideMenuActive ? "auto" : "none"}
+        style={[styles.sideMenuRoot, { opacity: sideMenuAnim }]}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={closeSideMenu}
+        />
+        <Animated.View
+          style={[
+            styles.sideMenuPanel,
+            { transform: [{ translateX: sideMenuTranslateX as any }] },
+          ]}
+        >
+          <View style={styles.sideMenuHeader}>
+            <Text style={styles.sideMenuHeaderTitle}>{t('menu')}</Text>
+          </View>
+
+          <View style={styles.membershipBox}>
+            <Text style={styles.membershipTitle}>내 멤버쉽등급</Text>
+            <Text style={styles.membershipValue}>{isPremium ? t('premium_label') : t('free_label')}</Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.sideMenuItem, styles.sideMenuItemFirst]}
+            activeOpacity={0.85}
+            onPress={() => {
+              requestNavigate('AdRemovePlan');
+            }}
           >
-            <View style={styles.sideMenuHeader}>
-              <Text style={styles.sideMenuHeaderTitle}>MENU</Text>
+            <View style={styles.sideMenuItemLeft}>
+              <Text style={styles.sideMenuItemIcon}>💎</Text>
+              <Text style={styles.sideMenuItemText}>{t('ad_remove_plan')}</Text>
             </View>
+            <Text style={styles.sideMenuItemChevron}>›</Text>
+          </TouchableOpacity>
 
-            <View style={styles.membershipBox}>
-              <Text style={styles.membershipTitle}>내 멤버쉽등급</Text>
-              <Text style={styles.membershipValue}>{isPremium ? "프리미엄" : "Free version"}</Text>
+          <TouchableOpacity
+            style={styles.sideMenuItem}
+            activeOpacity={0.85}
+            onPress={() => {
+              requestNavigate('Help');
+            }}
+          >
+            <View style={styles.sideMenuItemLeft}>
+              <Text style={styles.sideMenuItemIcon}>?</Text>
+              <Text style={styles.sideMenuItemText}>{t('help')}</Text>
             </View>
+            <Text style={styles.sideMenuItemChevron}>›</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.sideMenuItem, styles.sideMenuItemFirst]}
-              activeOpacity={0.85}
-              onPress={() => {
-                requestNavigate('AdRemovePlan');
-              }}
-            >
-              <View style={styles.sideMenuItemLeft}>
-                <Text style={styles.sideMenuItemIcon}>💎</Text>
-                <Text style={styles.sideMenuItemText}>광고제거 플랜</Text>
-              </View>
-              <Text style={styles.sideMenuItemChevron}>›</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sideMenuItem}
+            activeOpacity={0.85}
+            onPress={() => {
+              requestNavigate('Language');
+            }}
+          >
+            <View style={styles.sideMenuItemLeft}>
+              <Text style={styles.sideMenuItemIcon}>A</Text>
+              <Text style={styles.sideMenuItemText}>{t('language_change')}</Text>
+            </View>
+            <Text style={styles.sideMenuItemChevron}>›</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.sideMenuItem}
-              activeOpacity={0.85}
-              onPress={() => {
-                requestNavigate('Help');
-              }}
-            >
-              <View style={styles.sideMenuItemLeft}>
-                <Text style={styles.sideMenuItemIcon}>?</Text>
-                <Text style={styles.sideMenuItemText}>도움말</Text>
-              </View>
-              <Text style={styles.sideMenuItemChevron}>›</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sideMenuItem}
+            activeOpacity={0.85}
+            onPress={() => {
+              requestNavigate('AppInfo');
+            }}
+          >
+            <View style={styles.sideMenuItemLeft}>
+              <Text style={styles.sideMenuItemIcon}>i</Text>
+              <Text style={styles.sideMenuItemText}>{t('app_info')}</Text>
+            </View>
+            <Text style={styles.sideMenuItemChevron}>›</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.sideMenuItem}
-              activeOpacity={0.85}
-              onPress={() => {
-                requestNavigate('Language');
-              }}
-            >
-              <View style={styles.sideMenuItemLeft}>
-                <Text style={styles.sideMenuItemIcon}>A</Text>
-                <Text style={styles.sideMenuItemText}>언어변경</Text>
-              </View>
-              <Text style={styles.sideMenuItemChevron}>›</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sideMenuItem}
+            activeOpacity={0.85}
+            onPress={() => {
+              requestNavigate('TermsPrivacy');
+            }}
+          >
+            <View style={styles.sideMenuItemLeft}>
+              <Text style={styles.sideMenuItemIcon}>§</Text>
+              <Text style={styles.sideMenuItemText}>{t('terms_privacy')}</Text>
+            </View>
+            <Text style={styles.sideMenuItemChevron}>›</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.sideMenuItem}
-              activeOpacity={0.85}
-              onPress={() => {
-                requestNavigate('AppInfo');
-              }}
-            >
-              <View style={styles.sideMenuItemLeft}>
-                <Text style={styles.sideMenuItemIcon}>i</Text>
-                <Text style={styles.sideMenuItemText}>앱정보</Text>
-              </View>
-              <Text style={styles.sideMenuItemChevron}>›</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sideMenuItem}
-              activeOpacity={0.85}
-              onPress={() => {
-                requestNavigate('TermsPrivacy');
-              }}
-            >
-              <View style={styles.sideMenuItemLeft}>
-                <Text style={styles.sideMenuItemIcon}>§</Text>
-                <Text style={styles.sideMenuItemText}>약관 및 개인정보처리지침</Text>
-              </View>
-              <Text style={styles.sideMenuItemChevron}>›</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sideMenuItem}
-              activeOpacity={0.85}
-              onPress={() => {
-                requestNavigate('SubscriptionManage');
-              }}
-            >
-              <View style={styles.sideMenuItemLeft}>
-                <Text style={styles.sideMenuItemIcon}>S</Text>
-                <Text style={styles.sideMenuItemText}>구독관리</Text>
-              </View>
-              <Text style={styles.sideMenuItemChevron}>›</Text>
-            </TouchableOpacity>
-          </Animated.View>
+          <TouchableOpacity
+            style={styles.sideMenuItem}
+            activeOpacity={0.85}
+            onPress={() => {
+              requestNavigate('SubscriptionManage');
+            }}
+          >
+            <View style={styles.sideMenuItemLeft}>
+              <Text style={styles.sideMenuItemIcon}>S</Text>
+              <Text style={styles.sideMenuItemText}>{t('subscription_manage')}</Text>
+            </View>
+            <Text style={styles.sideMenuItemChevron}>›</Text>
+          </TouchableOpacity>
         </Animated.View>
-      </View>
+      </Animated.View>
+    </View>
   );
 }
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navTheme}>
-        <Stack.Navigator
-          initialRouteName="Home"
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: NAV_BG },
-            animation: 'none',
-          }}
-        >
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="AdRemovePlan" component={AdRemovePlanScreen} />
-          <Stack.Screen name="Help" component={HelpScreen} />
-          <Stack.Screen name="Language" component={LanguageScreen} />
-          <Stack.Screen name="AppInfo" component={AppInfoScreen} />
-          <Stack.Screen name="TermsPrivacy" component={TermsPrivacyScreen} />
-          <Stack.Screen name="SubscriptionManage" component={SubscriptionManageScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <LanguageProvider>
+        <NavigationContainer theme={navTheme}>
+          <Stack.Navigator
+            initialRouteName="Home"
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: NAV_BG },
+              animation: 'none',
+            }}
+          >
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="AdRemovePlan" component={AdRemovePlanScreen} />
+            <Stack.Screen name="Help" component={HelpScreen} />
+            <Stack.Screen name="Language" component={LanguageScreen} />
+            <Stack.Screen name="AppInfo" component={AppInfoScreen} />
+            <Stack.Screen name="TermsPrivacy" component={TermsPrivacyScreen} />
+            <Stack.Screen name="SubscriptionManage" component={SubscriptionManageScreen} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }
@@ -1359,7 +1344,7 @@ const styles = StyleSheet.create({
   checkIcon: { color: '#1dd4f5', fontWeight: 'bold', fontSize: 16, position: 'absolute', right: 15 },
   emptyText: { color: '#444', textAlign: 'center', marginTop: 50, fontSize: 12 },
 
-    alertRoot: {
+  alertRoot: {
     position: 'absolute',
     left: 0,
     right: 0,
@@ -1557,5 +1542,4 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginTop: 1
   },
-
 });
