@@ -152,31 +152,22 @@ class AppSwitchService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        val prefs = getSharedPreferences("AppSwitchPrefs", android.content.Context.MODE_PRIVATE)
-        val isEnabled = prefs.getBoolean("isEnabled", false)
-        val targetPackage = prefs.getString("targetPackage", "") ?: ""
-
-        if (isEnabled && targetPackage.isNotEmpty() && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            
-            // 1. 키를 누르는 순간 (ACTION_DOWN) 앱 실행 시도 (Side Effect)
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                val intent = packageManager.getLaunchIntentForPackage(targetPackage)
-                if (intent != null) {
-                    intent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    )
-                    startActivity(intent)
-                }
-            }
-
-            // 2. [핵심] 여기서 return true를 하지 않습니다!
-            // return super.onKeyEvent(event)를 호출하여 시스템이 이벤트를 "정상 처리(볼륨 다운)"하게 둡니다.
+    val prefs = getSharedPreferences("AppSwitchPrefs", android.content.Context.MODE_PRIVATE)
+    val isEnabled = prefs.getBoolean("isEnabled", false)
+    val targetPackage = prefs.getString("targetPackage", "") ?: ""
+    if (isEnabled && targetPackage.isNotEmpty() && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && event.action == KeyEvent.ACTION_DOWN) {
+        val intent = packageManager.getLaunchIntentForPackage(targetPackage)
+        if (intent != null) {
+            intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+            startActivity(intent)
         }
-
-        return super.onKeyEvent(event)
     }
+    return super.onKeyEvent(event)
+}
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {}
     override fun onInterrupt() {}
@@ -293,7 +284,12 @@ class AppSwitchModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun saveSettings(targetPackage: String, isEnabled: Boolean) {
         val prefs = reactApplicationContext.getSharedPreferences("AppSwitchPrefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("targetPackage", targetPackage).putBoolean("isEnabled", isEnabled).apply()
+        val editor = prefs.edit()      
+        if (targetPackage.isNotEmpty()) {
+            editor.putString("targetPackage", targetPackage)
+        }
+
+        editor.putBoolean("isEnabled", isEnabled).apply()
     }
 
     @ReactMethod

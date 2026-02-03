@@ -1,5 +1,5 @@
 ﻿import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as NavigationBar from 'expo-navigation-bar';
 import React, { useEffect, useRef, useState } from 'react';
@@ -21,7 +21,7 @@ import {
   View
 } from 'react-native';
 import 'react-native-gesture-handler';
-import mobileAds, { AdEventType, BannerAd, BannerAdSize, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
+import mobileAds, { AdEventType, BannerAd, BannerAdSize, InterstitialAd, MaxAdContentRating, TestIds } from 'react-native-google-mobile-ads';
 import * as IAP from 'react-native-iap';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
@@ -31,14 +31,14 @@ import HelpScreen from './src/screens/HelpScreen';
 import LanguageScreen from './src/screens/LanguageScreen';
 import SubscriptionManageScreen from './src/screens/SubscriptionManageScreen';
 import TermsPrivacyScreen from './src/screens/TermsPrivacyScreen';
-
 const { AppSwitchModule } = NativeModules;
 
 const Stack = createNativeStackNavigator();
 
-
 const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
 const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
+const INTERSTITIAL_UNIT_ID = __DEV__ ? TestIds.INTERSTITIAL : INTERSTITIAL_ID;
+const BANNER_UNIT_ID = __DEV__ ? TestIds.BANNER : BANNER_ID;
 
 const AD_REQUEST_OPTIONS = {
   requestNonPersonalizedAdsOnly: true,
@@ -47,6 +47,8 @@ const AD_REQUEST_OPTIONS = {
 const SESSION_START_AT_KEY = 'SWITCHING_SESSION_START_AT';
 const SESSION_DURATION_MS = 60 * 60 * 1000;
 const BATTERY_OPT_PROMPTED_KEY = 'SWITCHING_BATTERY_OPT_PROMPTED';
+// ✅ [추가] 프리미엄 상태 확인용 키
+const PREMIUM_CACHE_KEY = 'SWITCHING_IS_PREMIUM';
 
 interface AppInfo {
   label: string;
@@ -77,6 +79,21 @@ if (__DEV__) {
     'The app is running using the Legacy Architecture.',
   ]);
 }
+
+const NAV_BG = '#050505';
+const navTheme = {
+  ...DefaultTheme,
+  dark: true,
+  colors: {
+    ...DefaultTheme.colors,
+    background: NAV_BG,
+    card: NAV_BG,
+    border: NAV_BG,
+    primary: '#1dd4f5',
+    notification: '#1dd4f5',
+    text: '#ffffff',
+  },
+};
 
 function HomeScreen({ navigation }: any) {
   const [isEnabled, setIsEnabled] = useState<boolean>(false);
@@ -120,6 +137,7 @@ function HomeScreen({ navigation }: any) {
   const sideMenuAnim = useRef(new Animated.Value(0)).current;
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
   const [sideMenuActive, setSideMenuActive] = useState(false);
+  
 
   const alertAnim = useRef(new Animated.Value(0)).current;
   const [alertActive, setAlertActive] = useState(false);
@@ -159,8 +177,72 @@ function HomeScreen({ navigation }: any) {
     setAlertVisible(false);
   };
 
+  const pendingNavRef = useRef<{ name: string; params?: any } | null>(null);
+
+  const forceCloseTransientUI = () => {
+    pendingNavRef.current = null;
+
+    setSideMenuVisible(false);
+    setSideMenuActive(false);
+    sideMenuAnim.stopAnimation();
+    sideMenuAnim.setValue(0);
+
+    setModalVisible(false);
+    setOverlayActive(false);
+    overlayAnim.stopAnimation();
+    overlayAnim.setValue(0);
+
+    setAlertVisible(false);
+    setAlertActive(false);
+    alertAnim.stopAnimation();
+    alertAnim.setValue(0);
+  };
+
+  // ✅ [수정] 화면 포커스 시 프리미엄 상태 즉시 확인 (홈 화면 갱신용)
+  useEffect(() => {
+    const unsubFocus = navigation.addListener('focus', () => {
+      forceCloseTransientUI();
+      checkPremiumStatus();
+    });
+    const unsubBlur = navigation.addListener('blur', () => {
+      forceCloseTransientUI();
+    });
+    return () => {
+      unsubFocus();
+      unsubBlur();
+    };
+  }, [navigation]);
+
+  // ✅ [추가] 프리미엄 상태 체크 함수
+  const checkPremiumStatus = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(PREMIUM_CACHE_KEY);
+      if (cached === '1') {
+        setIsPremium(true);
+        // 프리미엄이면 타이머 초기화 (무제한)
+        clearSessionTimers();
+        progressAnim.setValue(0); // 로고 상태 고정
+      } else {
+        // 캐시가 없으면 IAP 재확인 (안전장치)
+        const purchases = await IAP.getAvailablePurchases();
+        const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
+        setIsPremium(hasSub);
+        if (hasSub) {
+            clearSessionTimers();
+            progressAnim.setValue(0);
+        }
+      }
+    } catch {}
+  };
+
   const openSideMenu = () => setSideMenuVisible(true);
   const closeSideMenu = () => setSideMenuVisible(false);
+
+  const requestNavigate = (name: string, params?: any) => {
+    pendingNavRef.current = { name, params };
+    setSideMenuVisible(false);
+  };
+
 
   const pressAlertButton = (btn: CustomAlertButton) => {
     setAlertVisible(false);
@@ -185,52 +267,47 @@ function HomeScreen({ navigation }: any) {
   const ensureBatteryOptimizationIgnored = async () => {
     if (Platform.OS !== 'android') return true;
 
-    let ignored: boolean | null = null;
+    // 1. [최우선] 실제 시스템 설정값을 먼저 확인합니다.
+    let isSystemIgnored = false;
     try {
       if (AppSwitchModule?.isBatteryOptimizationIgnored) {
-        ignored = await AppSwitchModule.isBatteryOptimizationIgnored();
+        isSystemIgnored = await AppSwitchModule.isBatteryOptimizationIgnored();
       }
     } catch {}
 
-    if (ignored === null) {
-      const prompted = await AsyncStorage.getItem(BATTERY_OPT_PROMPTED_KEY);
-      if (prompted === '1') return true;
+    // ✅ 이미 '제한 없음' 상태라면 바로 통과
+    if (isSystemIgnored === true) return true;
 
-      resetAdGateState();
-      showAlert(
-        "배터리 최적화 해제 권장",
-        "백그라운드에서 안정적으로 동작하려면 배터리 최적화를 해제하는 것이 좋습니다.\n\n[설정 이동]에서 이 앱의 배터리 사용을 '제한 없음'으로 변경해주세요.",
-        [
-          {
-            text: "나중에",
-            style: "cancel",
-            onPress: () => {
-              void AsyncStorage.setItem(BATTERY_OPT_PROMPTED_KEY, '1');
-              batteryBypassOnceRef.current = true;
-              setTimeout(() => { void toggleEnabledByLogo(); }, 0);
-            }
-          },
-          {
-            text: "설정 이동",
-            onPress: () => {
-              void AsyncStorage.setItem(BATTERY_OPT_PROMPTED_KEY, '1');
-              void openBatteryOptimizationSettings();
-            }
-          }
-        ]
-      );
-      return false;
+    // 2. 시스템 설정이 안 되어 있다면, 사용자가 '다시 보지 않기'를 눌렀는지 확인합니다.
+    const prompted = await AsyncStorage.getItem(BATTERY_OPT_PROMPTED_KEY);
+    if (prompted === '1') {
+      return true;
     }
 
-    if (ignored) return true;
-
+    // 3. (설정 안 됨) AND (알림 끄지 않음) 상태일 때만 팝업을 띄웁니다.
     resetAdGateState();
     showAlert(
-      "배터리 최적화 해제 필요",
-      "백그라운드에서 안정적으로 동작하려면 배터리 최적화를 해제해야 합니다.\n\n[설정 이동]에서 이 앱의 배터리 사용을 '제한 없음'으로 변경해주세요.",
+      "배터리 최적화 해제 권장",
+      "백그라운드에서 앱이 꺼지지 않으려면 배터리 설정을 '제한 없음'으로 변경해야 합니다.\n\n변경하지 않아도 실행은 되지만, 도중에 멈출 수 있습니다.",
       [
-        { text: "나중에", style: "cancel" },
-        { text: "설정 이동", onPress: () => { void openBatteryOptimizationSettings(); } }
+        {
+          text: "다시 보지 않기",
+          style: "cancel",
+          onPress: () => {
+            // ✅ "이제 그만 물어봐"라고 저장
+            void AsyncStorage.setItem(BATTERY_OPT_PROMPTED_KEY, '1');
+            
+            // ✅ 방금 누른 건 즉시 실행되도록 처리
+            batteryBypassOnceRef.current = true;
+            setTimeout(() => { void toggleEnabledByLogo(); }, 0);
+          }
+        },
+        {
+          text: "설정 이동",
+          onPress: () => {
+            void openBatteryOptimizationSettings();
+          }
+        }
       ]
     );
     return false;
@@ -276,10 +353,17 @@ function HomeScreen({ navigation }: any) {
       Animated.timing(sideMenuAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     } else {
       Animated.timing(sideMenuAnim, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => {
-        if (finished) setSideMenuActive(false);
+        if (finished) {
+          setSideMenuActive(false);
+          const next = pendingNavRef.current;
+          if (next) {
+            pendingNavRef.current = null;
+            navigation.navigate(next.name, next.params);
+          }
+        }
       });
     }
-  }, [sideMenuVisible, sideMenuAnim]);
+  }, [sideMenuVisible, sideMenuAnim, navigation]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -337,6 +421,13 @@ function HomeScreen({ navigation }: any) {
   };
 
   const syncSession = async () => {
+    // ✅ [수정] 프리미엄 유저는 세션 타이머 로직 무시
+    if (stateRef.current.isPremium) {
+        clearSessionTimers();
+        progressAnim.setValue(0);
+        return null; // 타이머 기반 시작 아님
+    }
+
     const saved = await AsyncStorage.getItem(SESSION_START_AT_KEY);
     const startAt = saved ? Number(saved) : null;
 
@@ -376,6 +467,17 @@ function HomeScreen({ navigation }: any) {
   };
 
   const startNewSessionAndEnable = async (pkgOverride?: string) => {
+    // ✅ [수정] 프리미엄 유저는 타이머 없이 바로 시작 처리
+    if (stateRef.current.isPremium) {
+        setIsEnabled(true);
+        if (AppSwitchModule?.saveSettings) {
+            AppSwitchModule.saveSettings(pkgOverride ?? stateRef.current.targetPackage, true);
+        }
+        clearSessionTimers();
+        progressAnim.setValue(0); // 로고 상태 활성화 고정
+        return;
+    }
+
     const now = Date.now();
     await AsyncStorage.setItem(SESSION_START_AT_KEY, String(now));
     sessionStartAtRef.current = now;
@@ -446,7 +548,12 @@ function HomeScreen({ navigation }: any) {
           await IAP.initConnection();
           const purchases = await IAP.getAvailablePurchases();
           const hasSub = purchases.some((p: any) => p.productId === 'monthly_sub' && p.transactionId);
-          if (mounted) setIsPremium(hasSub);
+          if (mounted) {
+             setIsPremium(hasSub);
+             if (hasSub) {
+                 await AsyncStorage.setItem(PREMIUM_CACHE_KEY, '1');
+             }
+          }
         } catch (e) {
           console.warn("IAP Init Fail:", e);
         }
@@ -460,7 +567,7 @@ function HomeScreen({ navigation }: any) {
 
           await mobileAds().initialize();
 
-          const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, AD_REQUEST_OPTIONS);
+          const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_UNIT_ID, AD_REQUEST_OPTIONS);
           interstitialRef.current = ad;
 
           unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
@@ -495,9 +602,23 @@ function HomeScreen({ navigation }: any) {
 
           unsubError = ad.addAdEventListener(AdEventType.ERROR, (err: any) => {
             console.warn("Ad Error:", err);
+
             adLoadedRef.current = false;
             if (mounted) setAdLoaded(false);
+
+            const wasGated = adGateInFlightRef.current || pendingSaveRef.current || pendingStartRef.current;
             resetAdGateState();
+
+            if (mounted && wasGated) {
+              showAlert("알림", "광고를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+            }
+
+            const code = String(err?.code || '');
+            const isNoFill = code.includes('no-fill') || code.includes('error-code-no-fill');
+
+            setTimeout(() => {
+              try { ad.load(); } catch {}
+            }, isNoFill ? 15000 : 5000);
           });
 
           ad.load();
@@ -533,7 +654,14 @@ function HomeScreen({ navigation }: any) {
               return;
             }
 
-            void startNewSessionAndEnable(pkg || stateRef.current.targetPackage);
+            // 프리미엄이면 타이머 없이, 아니면 타이머 시작
+            if (stateRef.current.isPremium) {
+                setIsEnabled(true);
+                clearSessionTimers();
+                progressAnim.setValue(0);
+            } else {
+                void startNewSessionAndEnable(pkg || stateRef.current.targetPackage);
+            }
           }).catch(() => {});
         } else {
           void expireSession(pkg || stateRef.current.targetPackage);
@@ -574,7 +702,7 @@ function HomeScreen({ navigation }: any) {
 
     if (!enabled || !pkg) return;
 
-    // ✅ [수정] 볼륨다운 트리거에서는 광고 없이 즉시 실행
+    // 광고 없이 즉시 실행
     launchTargetApp();
   }
 
@@ -668,7 +796,13 @@ function HomeScreen({ navigation }: any) {
     }
 
     if (isPremium) {
-      await startNewSessionAndEnable(targetPackage);
+      // ✅ [수정] 프리미엄은 바로 실행 (세션 로직 호출 X)
+      setIsEnabled(true);
+      if (AppSwitchModule?.saveSettings) {
+         AppSwitchModule.saveSettings(targetPackage, true);
+      }
+      clearSessionTimers();
+      progressAnim.setValue(0);
       return;
     }
 
@@ -710,7 +844,8 @@ function HomeScreen({ navigation }: any) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
         <SafeAreaView pointerEvents="none" edges={['top', 'left', 'right']} style={styles.gaugeSafeArea}>
-          <View style={[styles.gaugeOuter, { opacity: isEnabled ? 1 : 0 }]}>
+          {/* ✅ [수정] 프리미엄일 경우 게이지 바 숨김 */}
+          <View style={[styles.gaugeOuter, { opacity: (isEnabled && !isPremium) ? 1 : 0 }]}>
             <Animated.View
               style={[
                 styles.gaugeInner,
@@ -769,7 +904,7 @@ function HomeScreen({ navigation }: any) {
 
             <Text
               pointerEvents="none"
-              style={[styles.tapToStartHint, { opacity: isEnabled ? 0 : 1 }]} // ✅ [수정] Online/Offline 밑으로 위치 이동
+              style={[styles.tapToStartHint, { opacity: isEnabled ? 0 : 1 }]}
             >
               ▲ TAB TO START ▲
             </Text>
@@ -806,7 +941,7 @@ function HomeScreen({ navigation }: any) {
             </View>
 
             <View style={styles.footerArea}>
-              <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>                
+              <TouchableOpacity style={styles.fabButton} onPress={handleSaveWithLogic}>                 
                 <Text style={styles.fabText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -816,7 +951,7 @@ function HomeScreen({ navigation }: any) {
         <SafeAreaView style={styles.adSafeArea} edges={['bottom']}>
           <View style={styles.adContainer}>
             <BannerAd
-              unitId={BANNER_ID}
+              unitId={BANNER_UNIT_ID}
               size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
               requestOptions={AD_REQUEST_OPTIONS}
             />
@@ -919,8 +1054,7 @@ function HomeScreen({ navigation }: any) {
               style={[styles.sideMenuItem, styles.sideMenuItemFirst]}
               activeOpacity={0.85}
               onPress={() => {
-                closeSideMenu();
-                navigation.navigate('AdRemovePlan');
+                requestNavigate('AdRemovePlan');
               }}
             >
               <View style={styles.sideMenuItemLeft}>
@@ -934,8 +1068,7 @@ function HomeScreen({ navigation }: any) {
               style={styles.sideMenuItem}
               activeOpacity={0.85}
               onPress={() => {
-                closeSideMenu();
-                navigation.navigate('Help');
+                requestNavigate('Help');
               }}
             >
               <View style={styles.sideMenuItemLeft}>
@@ -949,8 +1082,7 @@ function HomeScreen({ navigation }: any) {
               style={styles.sideMenuItem}
               activeOpacity={0.85}
               onPress={() => {
-                closeSideMenu();
-                navigation.navigate('Language');
+                requestNavigate('Language');
               }}
             >
               <View style={styles.sideMenuItemLeft}>
@@ -964,8 +1096,7 @@ function HomeScreen({ navigation }: any) {
               style={styles.sideMenuItem}
               activeOpacity={0.85}
               onPress={() => {
-                closeSideMenu();
-                navigation.navigate('AppInfo');
+                requestNavigate('AppInfo');
               }}
             >
               <View style={styles.sideMenuItemLeft}>
@@ -979,8 +1110,7 @@ function HomeScreen({ navigation }: any) {
               style={styles.sideMenuItem}
               activeOpacity={0.85}
               onPress={() => {
-                closeSideMenu();
-                navigation.navigate('TermsPrivacy');
+                requestNavigate('TermsPrivacy');
               }}
             >
               <View style={styles.sideMenuItemLeft}>
@@ -994,8 +1124,7 @@ function HomeScreen({ navigation }: any) {
               style={styles.sideMenuItem}
               activeOpacity={0.85}
               onPress={() => {
-                closeSideMenu();
-                navigation.navigate('SubscriptionManage');
+                requestNavigate('SubscriptionManage');
               }}
             >
               <View style={styles.sideMenuItemLeft}>
@@ -1013,8 +1142,15 @@ function HomeScreen({ navigation }: any) {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <NavigationContainer theme={navTheme}>
+        <Stack.Navigator
+          initialRouteName="Home"
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: NAV_BG },
+            animation: 'none',
+          }}
+        >
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="AdRemovePlan" component={AdRemovePlanScreen} />
           <Stack.Screen name="Help" component={HelpScreen} />
@@ -1067,7 +1203,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   badgeFree: { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: '#333' },
-  badgePremium: { backgroundColor: 'rgba(0,122,255,0.15)', borderColor: '#0052D4' },
+  badgePremium: { backgroundColor: 'rgba(0,122,255,0.15)', borderColor: '#1dd4f5' },
   premiumText: { fontSize: 9, fontWeight: '800', color: '#ccc', letterSpacing: 0.5 },
 
   mainContent: {
