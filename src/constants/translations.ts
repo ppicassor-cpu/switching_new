@@ -3,7 +3,7 @@
 export type LanguageMode = 'ko' | 'en' | 'ja' | 'zh';
 
 export const STRINGS = {
-  ko: {
+    ko: {
     // --- 공통 (Common) ---
     alert: '알림',
     confirm: '확인',
@@ -15,6 +15,10 @@ export const STRINGS = {
     check: 'Check',
     later: '나중에',
     settings_move: '설정 이동',
+    exit_msg: '앱을 종료하시겠습니까?',
+    exit_msg_sub: '종료 후에도 앱은 그대로 동작합니다',
+    select_app_please: '앱을 선택해주세요.',
+
 
     // --- 메뉴/헤더 (Menu/Header) ---
     menu: 'MENU',
@@ -31,12 +35,14 @@ export const STRINGS = {
     system_offline: 'System Offline',
     tap_to_start: '▲ TAP TO START ▲',
     target_app: 'TARGET APP',
-    select_app: 'Select App', // ✅ 영어 유지
+    select_app: '앱을 선택해주세요', 
     touch_to_select: 'Touch to select target',
     premium_badge: '💎 PREMIUM',
     free_badge: 'FREE VERSION',
-    save_success: 'Save Complete',
+    save_success: '설정 저장완료',
     save_success_msg: '설정이 시스템에 반영되었습니다.',
+    no_apps_found: '앱을 찾을 수 없습니다.',
+    membership_grade: '내 멤버쉽등급',
 
     // --- 광고제거 플랜 (AdRemovePlanScreen) ---
     premium_title: 'Premium',
@@ -44,21 +50,21 @@ export const STRINGS = {
     quick_buy: 'Buy Now',
     status_premium: '현재: Premium 적용 중',
     status_free: '현재: Free 버전 사용 중',
-    premium_benefits: 'Premium Benefits',
-    benefit_1: '모든 배너 및 전면 광고 완벽 제거',
+    premium_benefits: 'Premium 혜택',
+    benefit_1: '전면 광고 완벽 제거',
     benefit_2: '앱 시작 및 저장 시 대기 시간 없이 즉시 실행',
     benefit_3: '세션 제한 없는 무제한 앱 스위칭 지원',
-    benefit_4: '향후 업데이트되는 프리미엄 전용 기능 이용 가능',
+    benefit_4: '향후 업데이트되는 프리미엄 기능 이용가능',
     benefit_5: '빠르고 정확한 프리미엄 전용 고객 지원',
-    subscription_manage_section: 'Subscription / Manage',
+    subscription_manage_section: '구독 / 관리',
     already_premium: '이미 Premium 혜택을 이용 중입니다',
     subscribe_monthly: '/ 월간 구독하기',
-    restore_purchase: 'Restore Purchase',
+    restore_purchase: '구매 복원',
     open_store: '스토어에서 구독 관리 열기 ↗',
     subscription_note: '구독 해지는 구글 플레이 스토어 설정에서 언제든 가능합니다.',
-    purchase_success: 'Thank You!',
+    purchase_success: '감사합니다!',
     purchase_success_msg: 'Premium 구독이 시작되었습니다.',
-    restore_complete: 'Restore Complete',
+    restore_complete: '복원 성공',
     restore_complete_msg: 'Premium 혜택이 복원되었습니다.',
     restore_fail_msg: '복원할 구독 내역이 없습니다.',
 
@@ -71,7 +77,7 @@ export const STRINGS = {
     manage_section: '관리',     // ✅ 한글로 수정
     check_history_again: '구매 내역 다시 확인',
     go_to_ad_remove: '광고제거 플랜 화면으로 이동 ›',
-    check_complete: 'Check Complete',
+    check_complete: '확인 완료',
     check_premium_msg: '현재 Premium이 적용되어 있습니다.',
     check_free_msg: '현재 Free 버전입니다.',
     check_fail_msg: '확인에 실패했습니다.',
@@ -84,13 +90,13 @@ export const STRINGS = {
     japanese: '日本語',
     chinese: '中文',
     lang_note: '현재 앱은 일부 문구가 시스템 언어/플랫폼에 따라 표시될 수 있습니다.',
-    apply_complete: 'Apply Complete',
+    apply_complete: '적용 완료',
     apply_complete_msg: '한국어로 설정되었습니다.',
 
     // --- 배터리 최적화 (Battery Optimization) ---
     battery_title: '배터리 최적화 해제 권장',
     battery_msg: "백그라운드에서 앱이 꺼지지 않으려면 배터리 설정을 '제한 없음'으로 변경해야 합니다.\n\n변경하지 않아도 실행은 되지만, 도중에 멈출 수 있습니다.",
-    dont_show_again: 'Don\'t show again',
+    dont_show_again: '다시보지 않기',
 
     // --- 접근성 권한 (Accessibility) ---
     accessibility_title: '접근성 권한 필요',
@@ -184,6 +190,9 @@ export const STRINGS = {
     check: 'Check',
     later: 'Later',
     settings_move: 'Go to Settings',
+    exit_msg: 'Do you want to exit the app?',
+    exit_msg_sub: 'The app will keep running even after you exit.',
+    select_app_please: 'Please select an app.',
 
     menu: 'Menu',
     home: 'Home',
@@ -204,6 +213,8 @@ export const STRINGS = {
     free_badge: 'FREE VERSION',
     save_success: 'Saved',
     save_success_msg: 'Settings have been applied.',
+    no_apps_found: 'No apps found.',
+    membership_grade: 'My Membership Grade',
 
     premium_title: 'Premium',
     premium_sub: 'Ad-free, faster experience',
@@ -343,6 +354,9 @@ export const STRINGS = {
     check: '確認中...',
     later: '後で',
     settings_move: '設定へ',
+    exit_msg: 'アプリを終了しますか？',
+    exit_msg_sub: '終了後もアプリはそのまま動作します。',
+    select_app_please: 'アプリを選択してください。',
 
     menu: 'メニュー',
     home: 'ホーム',
@@ -363,6 +377,8 @@ export const STRINGS = {
     free_badge: 'FREE VERSION',
     save_success: '保存完了',
     save_success_msg: '設定がシステムに適用されました。',
+    no_apps_found: 'アプリが見つかりません。',
+    membership_grade: 'マイメンバーシップグレード',
 
     premium_title: 'プレミアム',
     premium_sub: '広告なしで快適に利用',
@@ -502,6 +518,9 @@ export const STRINGS = {
     check: '确认中...',
     later: '稍后',
     settings_move: '前往设置',
+    exit_msg: '要退出应用吗？',
+    exit_msg_sub: '退出后应用仍会继续运行。',
+    select_app_please: '请选择应用。',
 
     menu: '菜单',
     home: '首页',
@@ -522,6 +541,8 @@ export const STRINGS = {
     free_badge: 'FREE VERSION',
     save_success: '保存成功',
     save_success_msg: '设置已应用到系统。',
+    no_apps_found: '未找到应用。',
+    membership_grade: '我的会员等级',
 
     premium_title: '高级版',
     premium_sub: '无广告，体验更流畅',

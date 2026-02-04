@@ -38,8 +38,10 @@ const Stack = createNativeStackNavigator();
 
 const INTERSTITIAL_ID = 'ca-app-pub-5144004139813427/8304323709';
 const BANNER_ID = 'ca-app-pub-5144004139813427/7182813723';
+const EXIT_BANNER_ID = 'ca-app-pub-5144004139813427/6947739921';
 const INTERSTITIAL_UNIT_ID = __DEV__ ? TestIds.INTERSTITIAL : INTERSTITIAL_ID;
 const BANNER_UNIT_ID = __DEV__ ? TestIds.BANNER : BANNER_ID;
+const EXIT_BANNER_UNIT_ID = __DEV__ ? TestIds.BANNER : EXIT_BANNER_ID;
 
 const AD_REQUEST_OPTIONS = {
   requestNonPersonalizedAdsOnly: true,
@@ -125,6 +127,7 @@ function HomeScreen({ navigation }: any) {
   const [alertTitle, setAlertTitle] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [alertButtons, setAlertButtons] = useState<CustomAlertButton[]>([{ text: t('confirm') }]);
+  const [alertShowExitAd, setAlertShowExitAd] = useState(false);
 
   const stateRef = useRef<AppState>({ targetPackage, isEnabled, isPremium });
 
@@ -166,19 +169,22 @@ function HomeScreen({ navigation }: any) {
     extrapolate: 'clamp',
   });
 
-  const showAlert = (title: string, message?: string, buttons?: CustomAlertButton[]) => {
+  const showAlert = (title: string, message?: string, buttons?: CustomAlertButton[], showAd?: boolean) => {
     setAlertTitle(title || '');
     setAlertMessage(message || '');
     const b = buttons && buttons.length ? buttons : [{ text: t('confirm') }];
     setAlertButtons(b);
+    setAlertShowExitAd(!!showAd);
     setAlertVisible(true);
   };
 
   const hideAlert = () => {
+    setAlertShowExitAd(false);
     setAlertVisible(false);
   };
 
   const pendingNavRef = useRef<{ name: string; params?: any } | null>(null);
+  const isFocusedRef = useRef<boolean>(false);
 
   const forceCloseTransientUI = () => {
     pendingNavRef.current = null;
@@ -193,6 +199,7 @@ function HomeScreen({ navigation }: any) {
     overlayAnim.stopAnimation();
     overlayAnim.setValue(0);
 
+    setAlertShowExitAd(false);
     setAlertVisible(false);
     setAlertActive(false);
     alertAnim.stopAnimation();
@@ -201,10 +208,12 @@ function HomeScreen({ navigation }: any) {
 
   useEffect(() => {
     const unsubFocus = navigation.addListener('focus', () => {
+      isFocusedRef.current = true;
       forceCloseTransientUI();
       checkPremiumStatus();
     });
     const unsubBlur = navigation.addListener('blur', () => {
+      isFocusedRef.current = false;
       forceCloseTransientUI();
     });
     return () => {
@@ -241,6 +250,7 @@ function HomeScreen({ navigation }: any) {
   };
 
   const pressAlertButton = (btn: CustomAlertButton) => {
+    setAlertShowExitAd(false);
     setAlertVisible(false);
     try {
       btn.onPress && btn.onPress();
@@ -369,10 +379,28 @@ function HomeScreen({ navigation }: any) {
         setModalVisible(false);
         return true;
       }
+
+      if (isFocusedRef.current && !navigation.canGoBack()) {
+        if (stateRef.current.isPremium) {
+          BackHandler.exitApp();
+          return true;
+        }
+
+        setAlertTitle(t('exit_msg'));
+        setAlertMessage(t('exit_msg_sub'));
+        setAlertButtons([
+          { text: t('cancel'), style: "cancel" },
+          { text: t('confirm'), onPress: () => BackHandler.exitApp() }
+        ]);
+        setAlertShowExitAd(true);
+        setAlertVisible(true);
+
+      }
+
       return false;
     });
     return () => sub.remove();
-  }, [sideMenuActive, alertActive, overlayActive]);
+  }, [sideMenuActive, alertActive, overlayActive, navigation, t]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -495,7 +523,7 @@ function HomeScreen({ navigation }: any) {
 
     if (!ad?.show || !ad?.load) {
       resetAdGateState();
-      showAlert(t('alert'), "광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      showAlert(t('alert'), t('ad_load_fail'));
       return;
     }
 
@@ -508,7 +536,7 @@ function HomeScreen({ navigation }: any) {
       ad.show();
     } else {
       ad.load();
-      showAlert(t('alert'), "광고 로딩 중입니다. 잠시만 기다려주세요.");
+      showAlert(t('alert'), t('ad_loading'));
     }
   };
 
@@ -597,7 +625,7 @@ function HomeScreen({ navigation }: any) {
             resetAdGateState();
 
             if (mounted && wasGated) {
-              showAlert(t('alert'), "광고를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+              showAlert(t('alert'), t('ad_load_error'));
             }
 
             const code = String(err?.code || '');
@@ -700,7 +728,7 @@ function HomeScreen({ navigation }: any) {
 
   const handleSaveWithLogic = async () => {
     if (!targetPackage) {
-      showAlert(t('alert'), "앱을 선택해주세요.");
+      showAlert(t('alert'), t('language') === 'ko' ? '앱을 선택해주세요.' : t('select_app_please'));
       return;
     }
 
@@ -715,7 +743,7 @@ function HomeScreen({ navigation }: any) {
 
     if (!adLoadedRef.current) {
       ad?.load();
-      showAlert(t('alert'), "광고를 불러오는 중입니다. 잠시 후 다시 눌러주세요.");
+      showAlert(t('alert'), t('ad_loading_press'));
       return;
     }
 
@@ -735,7 +763,7 @@ function HomeScreen({ navigation }: any) {
 
   const toggleEnabledByLogo = async () => {
     if (!targetPackage) {
-      showAlert(t('alert'), "앱을 선택해주세요.");
+      showAlert(t('alert'), t('language') === 'ko' ? '앱을 선택해주세요.' : t('select_app_please'));
       return;
     }
 
@@ -978,17 +1006,30 @@ function HomeScreen({ navigation }: any) {
         pointerEvents={alertActive ? "auto" : "none"}
         style={[styles.alertRoot, { opacity: alertAnim }]}
       >
-        <View style={styles.alertOverlay}>
-          <View style={StyleSheet.absoluteFillObject} />
-          <View style={styles.alertBox}>
-            <Text style={styles.alertTitle}>{alertTitle}</Text>
-            {!!alertMessage && <Text style={styles.alertMessage}>{alertMessage}</Text>}
-            <View style={[styles.alertButtonsRow, alertHasTwo ? styles.alertButtonsTwo : styles.alertButtonsOne]}>
+            <View style={styles.alertOverlay}>
+                  <View style={StyleSheet.absoluteFillObject} />
+                  <View style={[styles.alertBox, alertShowExitAd ? {paddingTop: 14} : null]}>
+                    {alertShowExitAd && !isPremium ? (
+                      <View style={[styles.alertAdWrap, {marginTop: 0}]}>
+                        <BannerAd
+                          unitId={EXIT_BANNER_UNIT_ID}
+                          size={BannerAdSize.MEDIUM_RECTANGLE}
+                          requestOptions={AD_REQUEST_OPTIONS}
+                        />
+                      </View>
+                    ) : null}
+                    <Text style={[styles.alertTitle, alertShowExitAd ? {marginTop: 10} : null]}>{alertTitle}</Text>
+                    {!!alertMessage && <Text style={[styles.alertMessage, alertShowExitAd ? {marginTop: 6} : null]}>{alertMessage}</Text>}
+                    <View style={[styles.alertButtonsRow, alertHasTwo ? styles.alertButtonsTwo : styles.alertButtonsOne]}>
               {secondaryBtn ? (
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => pressAlertButton(secondaryBtn)}
-                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                  style={[
+                    styles.alertButton,
+                    styles.alertButtonSecondary,
+                    alertHasTwo ? styles.alertButtonSecondaryTwo : null
+                  ]}
                 >
                   <Text style={styles.alertButtonSecondaryText}>{secondaryBtn.text}</Text>
                 </TouchableOpacity>
@@ -1363,7 +1404,7 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     backgroundColor: '#0f0f0f',
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: 0.4,
     borderColor: '#1dd4f5',
     paddingHorizontal: 18,
     paddingTop: 16,
@@ -1381,6 +1422,11 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 10,
     textAlign: 'center'
+  },
+  alertAdWrap: {
+    marginTop: 14,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   alertButtonsRow: {
     marginTop: 16,
